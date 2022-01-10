@@ -39,6 +39,7 @@ import org.elasticsearch.index.query.DistanceFeatureQueryBuilder;
 import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.QueryShardException;
 import org.elasticsearch.index.query.SearchExecutionContext;
+import org.elasticsearch.queryableexpression.QueryableExpression;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.fetch.subphase.FetchFieldsPhase;
 import org.elasticsearch.search.lookup.SearchLookup;
@@ -561,5 +562,14 @@ public abstract class MappedFieldType {
                 + typeName()
                 + "]."
         );
+    }
+
+    /**
+     * This field as a {@link QueryableExpression} for approximating scripts
+     * against the search index, or {@link QueryableExpression#UNQUERYABLE}
+     * if the field doesn't know how to approximate anything.
+     */
+    public QueryableExpression asQueryableExpression(SearchExecutionContext context) {
+        return QueryableExpression.UNQUERYABLE;
     }
 }

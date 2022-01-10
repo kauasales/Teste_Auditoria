@@ -21,6 +21,7 @@ import org.apache.lucene.document.StoredField;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.sandbox.document.HalfFloatPoint;
 import org.apache.lucene.sandbox.search.IndexSortSortedNumericDocValuesRangeQuery;
+import org.apache.lucene.search.DocValuesFieldExistsQuery;
 import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
@@ -41,6 +42,8 @@ import org.elasticsearch.index.fielddata.plain.SortedDoublesIndexFieldData;
 import org.elasticsearch.index.fielddata.plain.SortedNumericIndexFieldData;
 import org.elasticsearch.index.mapper.TimeSeriesParams.MetricType;
 import org.elasticsearch.index.query.SearchExecutionContext;
+import org.elasticsearch.queryableexpression.LongQueryableExpression;
+import org.elasticsearch.queryableexpression.QueryableExpression;
 import org.elasticsearch.script.DoubleFieldScript;
 import org.elasticsearch.script.LongFieldScript;
 import org.elasticsearch.script.Script;
@@ -618,6 +621,11 @@ public class NumberFieldMapper extends FieldMapper {
             public IndexFieldData.Builder getFieldDataBuilder(String name) {
                 return new SortedNumericIndexFieldData.Builder(name, numericType(), ByteDocValuesField::new);
             }
+
+            @Override
+            public QueryableExpression asQueryableExpression(String field, boolean hasDocValues, SearchExecutionContext context) {
+                return INTEGER.asQueryableExpression(field, hasDocValues, context);
+            }
         },
         SHORT("short", NumericType.SHORT) {
             @Override
@@ -684,6 +692,11 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             public IndexFieldData.Builder getFieldDataBuilder(String name) {
                 return new SortedNumericIndexFieldData.Builder(name, numericType(), ShortDocValuesField::new);
+            }
+
+            @Override
+            public QueryableExpression asQueryableExpression(String field, boolean hasDocValues, SearchExecutionContext context) {
+                return INTEGER.asQueryableExpression(field, hasDocValues, context);
             }
         },
         INTEGER("integer", NumericType.INT) {
@@ -781,6 +794,10 @@ public class NumberFieldMapper extends FieldMapper {
                         --u;
                     }
                 }
+                return rangeQueryWithKnownBounds(field, l, u, hasDocValues, context);
+            }
+
+            private Query rangeQueryWithKnownBounds(String field, int l, int u, boolean hasDocValues, SearchExecutionContext context) {
                 Query query = IntPoint.newRangeQuery(field, l, u);
                 if (hasDocValues) {
                     Query dvQuery = SortedNumericDocValuesField.newSlowRangeQuery(field, l, u);
@@ -810,6 +827,27 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             public IndexFieldData.Builder getFieldDataBuilder(String name) {
                 return new SortedNumericIndexFieldData.Builder(name, numericType(), IntegerDocValuesField::new);
+            }
+
+            @Override
+            public QueryableExpression asQueryableExpression(String field, boolean hasDocValues, SearchExecutionContext context) {
+                return LongQueryableExpression.field(field, new LongQueryableExpression.IntQueries() {
+                    @Override
+                    public Query approximateExists() {
+                        // The script we're modeling uses doc values. If they are missing it won't match anything.
+                        return new DocValuesFieldExistsQuery(field);
+                    }
+
+                    @Override
+                    public Query approximateTermQuery(int term) {
+                        return IntPoint.newExactQuery(field, term);
+                    }
+
+                    @Override
+                    public Query approximateRangeQuery(int lower, int upper) {
+                        return rangeQueryWithKnownBounds(field, lower, upper, hasDocValues, context);
+                    }
+                });
             }
         },
         LONG("long", NumericType.LONG) {
@@ -875,17 +913,31 @@ public class NumberFieldMapper extends FieldMapper {
                 boolean hasDocValues,
                 SearchExecutionContext context
             ) {
-                return longRangeQuery(lowerTerm, upperTerm, includeLower, includeUpper, (l, u) -> {
-                    Query query = LongPoint.newRangeQuery(field, l, u);
-                    if (hasDocValues) {
-                        Query dvQuery = SortedNumericDocValuesField.newSlowRangeQuery(field, l, u);
-                        query = new IndexOrDocValuesQuery(query, dvQuery);
-                        if (context.indexSortedOnField(field)) {
-                            query = new IndexSortSortedNumericDocValuesRangeQuery(field, l, u, query);
-                        }
+                return longRangeQuery(
+                    lowerTerm,
+                    upperTerm,
+                    includeLower,
+                    includeUpper,
+                    (l, u) -> rangeQueryWithKnownBounds(field, l, u, hasDocValues, context)
+                );
+            }
+
+            private Query rangeQueryWithKnownBounds(
+                String field,
+                long lower,
+                long upper,
+                boolean hasDocValues,
+                SearchExecutionContext context
+            ) {
+                Query query = LongPoint.newRangeQuery(field, lower, upper);
+                if (hasDocValues) {
+                    Query dvQuery = SortedNumericDocValuesField.newSlowRangeQuery(field, lower, upper);
+                    query = new IndexOrDocValuesQuery(query, dvQuery);
+                    if (context.indexSortedOnField(field)) {
+                        query = new IndexSortSortedNumericDocValuesRangeQuery(field, lower, upper, query);
                     }
-                    return query;
-                });
+                }
+                return query;
             }
 
             @Override
@@ -906,6 +958,27 @@ public class NumberFieldMapper extends FieldMapper {
             @Override
             public IndexFieldData.Builder getFieldDataBuilder(String name) {
                 return new SortedNumericIndexFieldData.Builder(name, numericType(), LongDocValuesField::new);
+            }
+
+            @Override
+            public QueryableExpression asQueryableExpression(String field, boolean hasDocValues, SearchExecutionContext context) {
+                return LongQueryableExpression.field(field, new LongQueryableExpression.LongQueries() {
+                    @Override
+                    public Query approximateExists() {
+                        // The script we're modeling uses doc values. If they are missing it won't match anything.
+                        return new DocValuesFieldExistsQuery(field);
+                    }
+
+                    @Override
+                    public Query approximateTermQuery(long term) {
+                        return LongPoint.newExactQuery(field, term);
+                    }
+
+                    @Override
+                    public Query approximateRangeQuery(long lower, long upper) {
+                        return rangeQueryWithKnownBounds(field, lower, upper, hasDocValues, context);
+                    }
+                });
             }
         };
 
@@ -962,6 +1035,10 @@ public class NumberFieldMapper extends FieldMapper {
 
         Number valueForSearch(Number value) {
             return value;
+        }
+
+        public QueryableExpression asQueryableExpression(String field, boolean hasDocValues, SearchExecutionContext context) {
+            return QueryableExpression.UNQUERYABLE;
         }
 
         /**
@@ -1278,6 +1355,14 @@ public class NumberFieldMapper extends FieldMapper {
          */
         public MetricType getMetricType() {
             return metricType;
+        }
+
+        @Override
+        public QueryableExpression asQueryableExpression(SearchExecutionContext context) {
+            if (false == isSearchable()) {
+                return QueryableExpression.UNQUERYABLE;
+            }
+            return type.asQueryableExpression(name(), hasDocValues(), context);
         }
     }
 

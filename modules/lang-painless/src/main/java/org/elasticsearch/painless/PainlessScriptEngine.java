@@ -15,6 +15,7 @@ import org.elasticsearch.painless.lookup.PainlessLookup;
 import org.elasticsearch.painless.lookup.PainlessLookupBuilder;
 import org.elasticsearch.painless.spi.Whitelist;
 import org.elasticsearch.painless.symbol.ScriptScope;
+import org.elasticsearch.queryableexpression.QueryableExpressionBuilder;
 import org.elasticsearch.script.ScriptContext;
 import org.elasticsearch.script.ScriptEngine;
 import org.elasticsearch.script.ScriptException;
@@ -87,6 +88,23 @@ public final class PainlessScriptEngine implements ScriptEngine {
         for (Map.Entry<ScriptContext<?>, List<Whitelist>> entry : contexts.entrySet()) {
             ScriptContext<?> context = entry.getKey();
             PainlessLookup lookup = PainlessLookupBuilder.buildFromWhitelists(entry.getValue());
+
+            for (String collectArgumentsTargetMethod : lookup.collectArgumentsTargetMethods()) {
+                try {
+                    Method m = context.factoryClazz.getMethod(collectArgumentsTargetMethod);
+                    if (m.getReturnType() != QueryableExpressionBuilder.class) {
+                        throw new IllegalArgumentException(
+                            "collected arguments method [" + collectArgumentsTargetMethod + "] must return QueryableExpressionBuilder"
+                        );
+                    }
+                } catch (NoSuchMethodException e) {
+                    throw new IllegalArgumentException(
+                        "factory class doesn't contain method to collect arguments [" + collectArgumentsTargetMethod + "]",
+                        e
+                    );
+                }
+            }
+
             mutableContextsToCompilers.put(
                 context,
                 new Compiler(context.instanceClazz, context.factoryClazz, context.statefulFactoryClazz, lookup)
@@ -298,7 +316,6 @@ public final class PainlessScriptEngine implements ScriptEngine {
         constructor.endMethod();
 
         Method reflect = null;
-        Method docFieldsReflect = null;
 
         for (Method method : context.factoryClazz.getMethods()) {
             if ("newInstance".equals(method.getName())) {
@@ -348,10 +365,46 @@ public final class PainlessScriptEngine implements ScriptEngine {
         deterAdapter.returnValue();
         deterAdapter.endMethod();
 
+        for (String collectArgumentsTargetMethod : scriptScope.getPainlessLookup().collectArgumentsTargetMethods()) {
+            String field = "$QE_" + collectArgumentsTargetMethod;
+
+            writer.visitField(
+                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC,
+                field,
+                Type.getType(QueryableExpressionBuilder.class).getDescriptor(),
+                null,
+                null
+            ).visitEnd();
+
+            String targetMethodDescriptor = MethodType.methodType(QueryableExpressionBuilder.class).toMethodDescriptorString();
+            GeneratorAdapter targetMethod = new GeneratorAdapter(
+                Opcodes.ASM5,
+                instance,
+                writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, collectArgumentsTargetMethod, targetMethodDescriptor, null, null)
+            );
+            targetMethod.visitCode();
+            targetMethod.getStatic(Type.getType("L" + className + ";"), field, Type.getType(QueryableExpressionBuilder.class));
+            targetMethod.returnValue();
+            targetMethod.endMethod();
+        }
+
         writer.visitEnd();
         Class<?> factory = loader.defineFactory(className.replace('/', '.'), writer.toByteArray());
 
         try {
+            for (String collectArgumentsTargetMethod : scriptScope.getPainlessLookup().collectArgumentsTargetMethods()) {
+                String field = "$QE_" + collectArgumentsTargetMethod;
+                QueryableExpressionBuilder result = scriptScope.getQueryableExpressionScope()
+                    .collectedArguments()
+                    .get(collectArgumentsTargetMethod);
+                if (result == null) {
+                    // If we didn't collect anything we'll give up optimizing.
+                    // Though it might be better to return some kind of NEVER_CALLED. One day! One day.
+                    result = QueryableExpressionBuilder.UNQUERYABLE;
+                }
+                factory.getField(field).set(null, result);
+            }
+
             return context.factoryClazz.cast(factory.getConstructor().newInstance());
         } catch (Exception exception) {
             // Catch everything to let the user know this is something caused internally.
@@ -436,6 +489,11 @@ public final class PainlessScriptEngine implements ScriptEngine {
             value = copy.remove(CompilerSettings.INITIAL_CALL_SITE_DEPTH);
             if (value != null) {
                 compilerSettings.setInitialCallSiteDepth(Integer.parseInt(value));
+            }
+
+            value = copy.remove(CompilerSettings.COLLECT_ARGUMENTS);
+            if (value != null) {
+                compilerSettings.setShouldCollectArguments(Boolean.parseBoolean(value));
             }
 
             value = copy.remove(CompilerSettings.REGEX_ENABLED.getKey());

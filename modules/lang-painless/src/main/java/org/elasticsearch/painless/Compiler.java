@@ -13,6 +13,7 @@ import org.elasticsearch.painless.antlr.Walker;
 import org.elasticsearch.painless.ir.ClassNode;
 import org.elasticsearch.painless.lookup.PainlessLookup;
 import org.elasticsearch.painless.node.SClass;
+import org.elasticsearch.painless.phase.CollectArgumentsPhase;
 import org.elasticsearch.painless.phase.DefaultConstantFoldingOptimizationPhase;
 import org.elasticsearch.painless.phase.DefaultIRTreeToASMBytesPhase;
 import org.elasticsearch.painless.phase.DefaultStaticConstantExtractionPhase;
@@ -218,6 +219,19 @@ final class Compiler {
         new DefaultStringConcatenationOptimizationPhase().visitClass(classNode, null);
         new DefaultConstantFoldingOptimizationPhase().visitClass(classNode, null);
         new DefaultStaticConstantExtractionPhase().visitClass(classNode, scriptScope);
+        if (settings.getShouldCollectArguments()) {
+            /*
+             * It'd be reasonable to do this is there are are any methods in the
+             * that actually need their arguments collected. But we use a compiler
+             * setting so we can:
+             * 1. Turn it on randomly during testing to get some extra coverage,
+             *    even if we aren't collecting arguments.
+             * 2. Turn it off in production if the user doesn't ask for it
+             *    explicitly. We don't think it'll take a long time or anything,
+             *    but we're being paranoid just in case.
+             */
+            new CollectArgumentsPhase().visitClass(classNode, scriptScope.getQueryableExpressionScope());
+        }
         new DefaultIRTreeToASMBytesPhase().visitScript(classNode);
         byte[] bytes = classNode.getBytes();
 
