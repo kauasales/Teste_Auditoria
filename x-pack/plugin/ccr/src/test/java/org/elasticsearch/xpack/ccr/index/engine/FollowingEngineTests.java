@@ -152,7 +152,15 @@ public class FollowingEngineTests extends ESTestCase {
             final EngineConfig engineConfig = engineConfig(shardId, indexSettings, threadPool, store);
             try (FollowingEngine followingEngine = createEngine(store, engineConfig)) {
                 final VersionType versionType = randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL, VersionType.EXTERNAL_GTE);
-                final List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(true, versionType, 2, 2, 20, "id");
+                final List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(
+                    followingEngine.config().getIndexSettings().getIndexVersionCreated(),
+                    true,
+                    versionType,
+                    2,
+                    2,
+                    20,
+                    "id"
+                );
                 ops.stream().mapToLong(op -> op.seqNo()).max().ifPresent(followingEngine::advanceMaxSeqNoOfUpdatesOrDeletes);
                 EngineTestCase.assertOpsOnReplica(ops, followingEngine, true, logger);
             }
@@ -316,7 +324,7 @@ public class FollowingEngineTests extends ESTestCase {
     }
 
     private Engine.Index indexForFollowing(String id, long seqNo, Engine.Operation.Origin origin, long version) {
-        final ParsedDocument parsedDocument = EngineTestCase.createParsedDoc(id, idFieldType, null);
+        final ParsedDocument parsedDocument = EngineTestCase.createParsedDoc(Version.CURRENT, id, idFieldType, null);
         return new Engine.Index(
             EngineTestCase.newUid(parsedDocument),
             parsedDocument,
@@ -347,12 +355,12 @@ public class FollowingEngineTests extends ESTestCase {
     }
 
     private Engine.Index indexForPrimary(String id) {
-        final ParsedDocument parsedDoc = EngineTestCase.createParsedDoc(id, idFieldType, null);
+        final ParsedDocument parsedDoc = EngineTestCase.createParsedDoc(Version.CURRENT, id, idFieldType, null);
         return new Engine.Index(EngineTestCase.newUid(parsedDoc), primaryTerm.get(), parsedDoc);
     }
 
     private Engine.Delete deleteForPrimary(String id) {
-        final ParsedDocument parsedDoc = EngineTestCase.createParsedDoc(id, idFieldType, null);
+        final ParsedDocument parsedDoc = EngineTestCase.createParsedDoc(Version.CURRENT, id, idFieldType, null);
         return new Engine.Delete(parsedDoc.id(), EngineTestCase.newUid(parsedDoc), primaryTerm.get());
     }
 
@@ -501,7 +509,15 @@ public class FollowingEngineTests extends ESTestCase {
     }
 
     public void testOptimizeSingleDocConcurrently() throws Exception {
-        List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(false, randomFrom(VersionType.values()), 2, 10, 500, "id");
+        List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(
+            Version.CURRENT,
+            false,
+            randomFrom(VersionType.values()),
+            2,
+            10,
+            500,
+            "id"
+        );
         Randomness.shuffle(ops);
         runFollowTest((leader, follower) -> {
             EngineTestCase.concurrentlyApplyOps(ops, leader);
@@ -760,7 +776,7 @@ public class FollowingEngineTests extends ESTestCase {
         for (int i = 0; i < numOps; i++) {
             String docId = Integer.toString(between(1, 100));
             ParsedDocument doc = randomBoolean()
-                ? EngineTestCase.createParsedDoc(docId, idFieldType, null)
+                ? EngineTestCase.createParsedDoc(Version.CURRENT, docId, idFieldType, null)
                 : nestedDocFunc.apply(docId, randomInt(3));
             if (randomBoolean()) {
                 operations.add(
@@ -893,7 +909,15 @@ public class FollowingEngineTests extends ESTestCase {
                 rollTranslog.start();
 
                 Thread indexing = new Thread(() -> {
-                    List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(true, VersionType.EXTERNAL, 2, 50, 500, "id");
+                    List<Engine.Operation> ops = EngineTestCase.generateSingleDocHistory(
+                        Version.CURRENT,
+                        true,
+                        VersionType.EXTERNAL,
+                        2,
+                        50,
+                        500,
+                        "id"
+                    );
                     engine.advanceMaxSeqNoOfUpdatesOrDeletes(ops.stream().mapToLong(Engine.Operation::seqNo).max().getAsLong());
                     for (Engine.Operation op : ops) {
                         if (running.get() == false) {

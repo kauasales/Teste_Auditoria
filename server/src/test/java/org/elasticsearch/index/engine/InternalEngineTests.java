@@ -19,7 +19,6 @@ import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.core.filter.RegexFilter;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
-import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
@@ -38,7 +37,6 @@ import org.apache.lucene.index.MergePolicy;
 import org.apache.lucene.index.NoDeletionPolicy;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.index.PointValues;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.SoftDeletesRetentionMergePolicy;
 import org.apache.lucene.index.Term;
@@ -989,7 +987,7 @@ public class InternalEngineTests extends EngineTestCase {
 
     public void testGetWithSearcherWrapper() throws Exception {
         engine.refresh("warm_up");
-        engine.index(indexForDoc(createParsedDoc("1", idFieldType, null)));
+        engine.index(indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "1", idFieldType, null)));
         assertThat(engine.lastRefreshedCheckpoint(), equalTo(NO_OPS_PERFORMED));
         MapperService mapperService = createMapperService();
         MappingLookup mappingLookup = mapperService.mappingLookup();
@@ -1007,7 +1005,7 @@ public class InternalEngineTests extends EngineTestCase {
         // refresh triggered, as we did not track translog location until the first realtime get.
         assertThat(engine.lastRefreshedCheckpoint(), equalTo(0L));
 
-        engine.index(indexForDoc(createParsedDoc("1", idFieldType, null)));
+        engine.index(indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "1", idFieldType, null)));
         try (Engine.GetResult get = engine.get(new Engine.Get(true, true, "1"), mappingLookup, documentParser, searcher -> searcher)) {
             assertTrue(get.exists());
             assertEquals(++translogGetCountExpected, translogGetCount.getAsLong());
@@ -1016,7 +1014,7 @@ public class InternalEngineTests extends EngineTestCase {
         assertThat(engine.lastRefreshedCheckpoint(), equalTo(0L)); // no refresh; just read from translog
 
         if (randomBoolean()) {
-            engine.index(indexForDoc(createParsedDoc("1", idFieldType, null)));
+            engine.index(indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "1", idFieldType, null)));
         }
         try (
             Engine.GetResult get = engine.get(
@@ -1073,7 +1071,7 @@ public class InternalEngineTests extends EngineTestCase {
         }
         assertThat("no refresh, just read from translog or in-memory segment", engine.lastRefreshedCheckpoint(), equalTo(0L));
 
-        engine.index(indexForDoc(createParsedDoc("1", idFieldType, null)));
+        engine.index(indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "1", idFieldType, null)));
         try (
             Engine.GetResult get = engine.get(
                 new Engine.Get(true, true, "1"),
@@ -1674,6 +1672,7 @@ public class InternalEngineTests extends EngineTestCase {
             for (int i = 0; i < numDocs; i++) {
                 boolean useRecoverySource = randomBoolean() || omitSourceAllTheTime;
                 ParsedDocument doc = testParsedDocument(
+                    engine.config().getIndexSettings().getIndexVersionCreated(),
                     Integer.toString(i),
                     idFieldType,
                     null,
@@ -1691,6 +1690,8 @@ public class InternalEngineTests extends EngineTestCase {
             for (int i = 0; i < numDocs; i++) {
                 boolean useRecoverySource = randomBoolean() || omitSourceAllTheTime;
                 ParsedDocument doc = testParsedDocument(
+                    engine.config().getIndexSettings().getIndexVersionCreated(),
+
                     Integer.toString(i),
                     idFieldType,
                     null,
@@ -1758,7 +1759,16 @@ public class InternalEngineTests extends EngineTestCase {
             }
             if (numSegments == 1) {
                 boolean useRecoverySource = randomBoolean() || omitSourceAllTheTime;
-                ParsedDocument doc = testParsedDocument("dummy", idFieldType, null, testDocument(), B_1, null, useRecoverySource);
+                ParsedDocument doc = testParsedDocument(
+                    engine.config().getIndexSettings().getIndexVersionCreated(),
+                    "dummy",
+                    idFieldType,
+                    null,
+                    testDocument(),
+                    B_1,
+                    null,
+                    useRecoverySource
+                );
                 engine.index(indexForDoc(doc));
                 if (useRecoverySource == false) {
                     liveDocsWithSource.add(doc.id());
@@ -1872,6 +1882,7 @@ public class InternalEngineTests extends EngineTestCase {
 
     public void testOutOfOrderDocsOnReplica() throws IOException {
         final List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             true,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL, VersionType.EXTERNAL_GTE),
             2,
@@ -1884,6 +1895,7 @@ public class InternalEngineTests extends EngineTestCase {
 
     public void testConcurrentOutOfOrderDocsOnReplica() throws IOException, InterruptedException {
         final List<Engine.Operation> opsDoc1 = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             true,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL),
             2,
@@ -1900,6 +1912,7 @@ public class InternalEngineTests extends EngineTestCase {
             lastFieldValueDoc1 = null;
         }
         final List<Engine.Operation> opsDoc2 = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             true,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL),
             2,
@@ -1994,12 +2007,28 @@ public class InternalEngineTests extends EngineTestCase {
     }
 
     public void testInternalVersioningOnPrimary() throws IOException {
-        final List<Engine.Operation> ops = generateSingleDocHistory(false, VersionType.INTERNAL, 2, 2, 20, "1");
+        final List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            false,
+            VersionType.INTERNAL,
+            2,
+            2,
+            20,
+            "1"
+        );
         assertOpsOnPrimary(ops, Versions.NOT_FOUND, true, engine);
     }
 
     public void testVersionOnPrimaryWithConcurrentRefresh() throws Exception {
-        List<Engine.Operation> ops = generateSingleDocHistory(false, VersionType.INTERNAL, 2, 10, 100, "1");
+        List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            false,
+            VersionType.INTERNAL,
+            2,
+            10,
+            100,
+            "1"
+        );
         CountDownLatch latch = new CountDownLatch(1);
         AtomicBoolean running = new AtomicBoolean(true);
         Thread refreshThread = new Thread(() -> {
@@ -2243,7 +2272,15 @@ public class InternalEngineTests extends EngineTestCase {
         final Set<VersionType> nonInternalVersioning = new HashSet<>(Arrays.asList(VersionType.values()));
         nonInternalVersioning.remove(VersionType.INTERNAL);
         final VersionType versionType = randomFrom(nonInternalVersioning);
-        final List<Engine.Operation> ops = generateSingleDocHistory(false, versionType, 2, 2, 20, "1");
+        final List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            false,
+            versionType,
+            2,
+            2,
+            20,
+            "1"
+        );
         final Engine.Operation lastOp = ops.get(ops.size() - 1);
         final String lastFieldValue;
         if (lastOp instanceof Engine.Index index) {
@@ -2326,8 +2363,24 @@ public class InternalEngineTests extends EngineTestCase {
     }
 
     public void testVersioningPromotedReplica() throws IOException {
-        final List<Engine.Operation> replicaOps = generateSingleDocHistory(true, VersionType.INTERNAL, 1, 2, 20, "1");
-        List<Engine.Operation> primaryOps = generateSingleDocHistory(false, VersionType.INTERNAL, 2, 2, 20, "1");
+        final List<Engine.Operation> replicaOps = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            true,
+            VersionType.INTERNAL,
+            1,
+            2,
+            20,
+            "1"
+        );
+        List<Engine.Operation> primaryOps = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            false,
+            VersionType.INTERNAL,
+            2,
+            2,
+            20,
+            "1"
+        );
         Engine.Operation lastReplicaOp = replicaOps.get(replicaOps.size() - 1);
         final boolean deletedOnReplica = lastReplicaOp instanceof Engine.Delete;
         final long finalReplicaVersion = lastReplicaOp.version();
@@ -2346,7 +2399,15 @@ public class InternalEngineTests extends EngineTestCase {
     }
 
     public void testConcurrentExternalVersioningOnPrimary() throws IOException, InterruptedException {
-        final List<Engine.Operation> ops = generateSingleDocHistory(false, VersionType.EXTERNAL, 2, 100, 300, "1");
+        final List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            false,
+            VersionType.EXTERNAL,
+            2,
+            100,
+            300,
+            "1"
+        );
         final Engine.Operation lastOp = ops.get(ops.size() - 1);
         final String lastFieldValue;
         if (lastOp instanceof Engine.Index index) {
@@ -2855,40 +2916,29 @@ public class InternalEngineTests extends EngineTestCase {
                 assertThat(localCheckpoint, greaterThanOrEqualTo(prevLocalCheckpoint));
                 assertThat(maxSeqNo, greaterThanOrEqualTo(prevMaxSeqNo));
                 try (IndexReader reader = DirectoryReader.open(commit)) {
-                    Long highest = getHighestSeqNo(reader);
-                    final long highestSeqNo;
-                    if (highest != null) {
-                        highestSeqNo = highest.longValue();
-                    } else {
-                        highestSeqNo = SequenceNumbers.NO_OPS_PERFORMED;
+                    // make sure all sequence numbers up to and including the local checkpoint are in the index
+                    FixedBitSet seqNosBitSet = getSeqNosSet(reader, maxSeqNo);
+                    for (int i = 0; i <= localCheckpoint; i++) {
+                        assertTrue(
+                            "local checkpoint [" + localCheckpoint + "], _seq_no [" + i + "] should have doc values",
+                            seqNosBitSet.get(i)
+                        );
+                    }
+                    long highestSeqNo = localCheckpoint;
+                    for (int i = Math.toIntExact(highestSeqNo); i < seqNosBitSet.length(); i++) {
+                        if (seqNosBitSet.get(i)) {
+                            highestSeqNo = i;
+                        }
                     }
                     // make sure localCheckpoint <= highest seq no found <= maxSeqNo
                     assertThat(highestSeqNo, greaterThanOrEqualTo(localCheckpoint));
                     assertThat(highestSeqNo, lessThanOrEqualTo(maxSeqNo));
-                    // make sure all sequence numbers up to and including the local checkpoint are in the index
-                    FixedBitSet seqNosBitSet = getSeqNosSet(reader, highestSeqNo);
-                    for (int i = 0; i <= localCheckpoint; i++) {
-                        assertTrue(
-                            "local checkpoint [" + localCheckpoint + "], _seq_no [" + i + "] should be indexed",
-                            seqNosBitSet.get(i)
-                        );
-                    }
                 }
                 prevLocalCheckpoint = localCheckpoint;
                 prevMaxSeqNo = maxSeqNo;
             }
             IOUtils.close(commits);
         }
-    }
-
-    private static Long getHighestSeqNo(final IndexReader reader) throws IOException {
-        final String fieldName = SeqNoFieldMapper.NAME;
-        long size = PointValues.size(reader, fieldName);
-        if (size == 0) {
-            return null;
-        }
-        byte[] max = PointValues.getMaxPackedValue(reader, fieldName);
-        return LongPoint.decodeDimension(max, 0);
     }
 
     private static FixedBitSet getSeqNosSet(final IndexReader reader, final long highestSeqNo) throws IOException {
@@ -4645,7 +4695,11 @@ public class InternalEngineTests extends EngineTestCase {
         MatcherAssert.assertThat(searchResult, EngineSearcherTotalHitsMatcher.engineSearcherTotalHits(1));
         MatcherAssert.assertThat(
             searchResult,
-            EngineSearcherTotalHitsMatcher.engineSearcherTotalHits(LongPoint.newExactQuery("_seq_no", 2), 1)
+            EngineSearcherTotalHitsMatcher.engineSearcherTotalHits(
+                SeqNoFieldMapper.INSTANCE.fieldType()
+                    .rangeQuery(engine.getEngineConfig().getIndexSettings().getIndexVersionCreated(), 2, 2),
+                1
+            )
         );
         searchResult.close();
     }
@@ -4659,7 +4713,12 @@ public class InternalEngineTests extends EngineTestCase {
             boolean isIndexing = randomBoolean();
             int copies = frequently() ? 1 : between(2, 4);
             for (int c = 0; c < copies; c++) {
-                final ParsedDocument doc = EngineTestCase.createParsedDoc(id, idFieldType, null);
+                final ParsedDocument doc = EngineTestCase.createParsedDoc(
+                    engine.config().getIndexSettings().getIndexVersionCreated(),
+                    id,
+                    idFieldType,
+                    null
+                );
                 if (isIndexing) {
                     operations.add(
                         new Engine.Index(
@@ -5100,7 +5159,7 @@ public class InternalEngineTests extends EngineTestCase {
         int numOps = between(10, 100);
         for (int i = 0; i < numOps; i++) {
             String id = Integer.toString(randomIntBetween(1, 10));
-            ParsedDocument doc = createParsedDoc(id, idFieldType, null);
+            ParsedDocument doc = createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), id, idFieldType, null);
             Engine.Operation.TYPE type = randomFrom(Engine.Operation.TYPE.values());
             switch (type) {
                 case INDEX -> {
@@ -5506,7 +5565,9 @@ public class InternalEngineTests extends EngineTestCase {
                 randomBoolean() ? ProvidedIdFieldMapper.Defaults.FIELD_TYPE : TsidExtractingIdFieldMapper.FIELD_TYPE
             );
             final Field versionField = new NumericDocValuesField("_version", 0);
-            final SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+            final SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID(
+                engine.config().getIndexSettings().getIndexVersionCreated()
+            );
             final LuceneDocument document = new LuceneDocument();
             document.add(uidField);
             document.add(versionField);
@@ -6200,6 +6261,7 @@ public class InternalEngineTests extends EngineTestCase {
 
     public void testLuceneHistoryOnPrimary() throws Exception {
         final List<Engine.Operation> operations = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             false,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL),
             2,
@@ -6212,6 +6274,7 @@ public class InternalEngineTests extends EngineTestCase {
 
     public void testLuceneHistoryOnReplica() throws Exception {
         final List<Engine.Operation> operations = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             true,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL),
             2,
@@ -6279,6 +6342,7 @@ public class InternalEngineTests extends EngineTestCase {
             new RetentionLeases(primaryTerm, retentionLeasesVersion.get(), Collections.emptyList())
         );
         final List<Engine.Operation> operations = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
             true,
             randomFrom(VersionType.INTERNAL, VersionType.EXTERNAL),
             2,
@@ -6380,7 +6444,15 @@ public class InternalEngineTests extends EngineTestCase {
             refreshThreads[i].start();
         }
         latch.await();
-        List<Engine.Operation> ops = generateSingleDocHistory(true, VersionType.EXTERNAL, 1, 10, 1000, "1");
+        List<Engine.Operation> ops = generateSingleDocHistory(
+            engine.config().getIndexSettings().getIndexVersionCreated(),
+            true,
+            VersionType.EXTERNAL,
+            1,
+            10,
+            1000,
+            "1"
+        );
         concurrentlyApplyOps(ops, engine);
         done.set(true);
         for (Thread thread : refreshThreads) {
@@ -6500,7 +6572,12 @@ public class InternalEngineTests extends EngineTestCase {
         int numOps = between(1, 500);
         for (int i = 0; i < numOps; i++) {
             long currentMaxSeqNoOfUpdates = engine.getMaxSeqNoOfUpdatesOrDeletes();
-            ParsedDocument doc = createParsedDoc(Integer.toString(between(1, 100)), idFieldType, null);
+            ParsedDocument doc = createParsedDoc(
+                engine.config().getIndexSettings().getIndexVersionCreated(),
+                Integer.toString(between(1, 100)),
+                idFieldType,
+                null
+            );
             if (randomBoolean()) {
                 Engine.IndexResult result = engine.index(indexForDoc(doc));
                 if (liveDocIds.add(doc.id()) == false) {
@@ -6807,7 +6884,9 @@ public class InternalEngineTests extends EngineTestCase {
             while (stopped.get() == false) {
                 String id = Integer.toString(randomIntBetween(1, 100));
                 try {
-                    engine.index(indexForDoc(createParsedDoc(id, idFieldType, null)));
+                    engine.index(
+                        indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), id, idFieldType, null))
+                    );
                     indexedDocs.release();
                 } catch (IOException e) {
                     throw new AssertionError(e);
@@ -7056,7 +7135,13 @@ public class InternalEngineTests extends EngineTestCase {
             iw.set(new ThrowingIndexWriter(dir, iwc));
             return iw.get();
         }, null, null, config(defaultSettings, store, createTempDir(), NoMergePolicy.INSTANCE, null))) {
-            engine.index(new Engine.Index(newUid("0"), primaryTerm.get(), InternalEngineTests.createParsedDoc("0", idFieldType, null)));
+            engine.index(
+                new Engine.Index(
+                    newUid("0"),
+                    primaryTerm.get(),
+                    InternalEngineTests.createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "0", idFieldType, null)
+                )
+            );
             final Engine.Delete op = new Engine.Delete("0", newUid("0"), primaryTerm.get());
             consumer.accept(engine, op);
             iw.get().setThrowFailure(() -> new IllegalArgumentException("fatal"));
@@ -7070,8 +7155,12 @@ public class InternalEngineTests extends EngineTestCase {
     }
 
     public void testIndexThrottling() throws Exception {
-        final Engine.Index indexWithThrottlingCheck = spy(indexForDoc(createParsedDoc("1", idFieldType, null)));
-        final Engine.Index indexWithoutThrottlingCheck = spy(indexForDoc(createParsedDoc("2", idFieldType, null)));
+        final Engine.Index indexWithThrottlingCheck = spy(
+            indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "1", idFieldType, null))
+        );
+        final Engine.Index indexWithoutThrottlingCheck = spy(
+            indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "2", idFieldType, null))
+        );
         doAnswer(invocation -> {
             try {
                 assertTrue(engine.throttleLockIsHeldByCurrentThread());
@@ -7129,7 +7218,9 @@ public class InternalEngineTests extends EngineTestCase {
                 Set<String> ids = new HashSet<>();
                 for (int i = 0; i < numDocs; i++) {
                     String id = Integer.toString(i);
-                    engine.index(indexForDoc(createParsedDoc(id, idFieldType, null)));
+                    engine.index(
+                        indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), id, idFieldType, null))
+                    );
                     ids.add(id);
                 }
                 final int refreshCountBeforeGet = refreshCount.get();
@@ -7140,7 +7231,12 @@ public class InternalEngineTests extends EngineTestCase {
                         phaser.arriveAndAwaitAdvance();
                         int iters = randomIntBetween(1, 10);
                         for (int i = 0; i < iters; i++) {
-                            ParsedDocument doc = createParsedDoc(randomFrom(ids), idFieldType, null);
+                            ParsedDocument doc = createParsedDoc(
+                                engine.config().getIndexSettings().getIndexVersionCreated(),
+                                randomFrom(ids),
+                                idFieldType,
+                                null
+                            );
                             try (
                                 Engine.GetResult getResult = engine.get(
                                     newGet(true, doc),
@@ -7158,7 +7254,11 @@ public class InternalEngineTests extends EngineTestCase {
                 }
                 phaser.arriveAndAwaitAdvance();
                 for (int i = 0; i < numDocs; i++) {
-                    engine.index(indexForDoc(createParsedDoc("more-" + i, idFieldType, null)));
+                    engine.index(
+                        indexForDoc(
+                            createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "more-" + i, idFieldType, null)
+                        )
+                    );
                 }
                 for (Thread getter : getters) {
                     getter.join();
@@ -7202,7 +7302,9 @@ public class InternalEngineTests extends EngineTestCase {
             );
             try (InternalEngine engine = createEngine(config)) {
                 if (randomBoolean()) {
-                    engine.index(indexForDoc(createParsedDoc("id", idFieldType, null)));
+                    engine.index(
+                        indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), "id", idFieldType, null))
+                    );
                 }
                 threadPool.executor(ThreadPool.Names.REFRESH)
                     .execute(
@@ -7335,7 +7437,9 @@ public class InternalEngineTests extends EngineTestCase {
             for (int i = 0; i < numDocs; i++) {
                 final String id = Integer.toString(randomInt(numDocs));
                 if (randomBoolean()) {
-                    operations.add(indexForDoc(createParsedDoc(id, idFieldType, null)));
+                    operations.add(
+                        indexForDoc(createParsedDoc(engine.config().getIndexSettings().getIndexVersionCreated(), id, idFieldType, null))
+                    );
                 } else {
                     operations.add(new Engine.Delete(id, newUid(id), primaryTerm.get()));
                 }

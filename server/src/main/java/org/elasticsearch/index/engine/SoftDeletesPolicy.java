@@ -8,8 +8,8 @@
 
 package org.elasticsearch.index.engine;
 
-import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.search.Query;
+import org.elasticsearch.Version;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.Releasables;
 import org.elasticsearch.index.mapper.SeqNoFieldMapper;
@@ -26,6 +26,7 @@ import java.util.function.Supplier;
  * A policy that controls how many soft-deleted documents should be retained for peer-recovery and querying history changes purpose.
  */
 final class SoftDeletesPolicy {
+    private final Version indexVersionCreated;
     private final LongSupplier globalCheckpointSupplier;
     private long localCheckpointOfSafeCommit;
     // This lock count is used to prevent `minRetainedSeqNo` from advancing.
@@ -38,11 +39,13 @@ final class SoftDeletesPolicy {
     private final Supplier<RetentionLeases> retentionLeasesSupplier;
 
     SoftDeletesPolicy(
+        final Version indexVersionCreated,
         final LongSupplier globalCheckpointSupplier,
         final long minRetainedSeqNo,
         final long retentionOperations,
         final Supplier<RetentionLeases> retentionLeasesSupplier
     ) {
+        this.indexVersionCreated = indexVersionCreated;
         this.globalCheckpointSupplier = globalCheckpointSupplier;
         this.retentionOperations = retentionOperations;
         this.minRetainedSeqNo = minRetainedSeqNo;
@@ -147,7 +150,7 @@ final class SoftDeletesPolicy {
      * Documents including tombstones are soft-deleted and matched this query will be retained and won't cleaned up by merges.
      */
     Query getRetentionQuery() {
-        return LongPoint.newRangeQuery(SeqNoFieldMapper.NAME, getMinRetainedSeqNo(), Long.MAX_VALUE);
+        return SeqNoFieldMapper.INSTANCE.fieldType().rangeQuery(indexVersionCreated, getMinRetainedSeqNo(), Long.MAX_VALUE);
     }
 
 }
