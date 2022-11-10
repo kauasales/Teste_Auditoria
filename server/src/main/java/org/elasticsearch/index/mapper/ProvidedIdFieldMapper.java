@@ -16,6 +16,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.cluster.routing.IndexRouting;
 import org.elasticsearch.common.logging.DeprecationCategory;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.util.BigArrays;
@@ -286,5 +287,12 @@ public class ProvidedIdFieldMapper extends IdFieldMapper {
     @Override
     public String reindexId(String id) {
         return id;
+    }
+
+    private static final IdLoader ID_LOADER = (reader, docIdsInLeaf) -> (storedFields, docId) -> storedFields.id();
+
+    @Override
+    public IdLoader loader(IndexRouting indexRouting) {
+        return ID_LOADER;
     }
 }

@@ -36,6 +36,7 @@ import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
 import org.elasticsearch.index.fielddata.FieldDataContext;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.IdLoader;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MappedFieldType.FielddataOperation;
 import org.elasticsearch.index.mapper.Mapper;
@@ -413,6 +414,13 @@ public class SearchExecutionContext extends QueryRewriteContext {
             return new SourceLoader.Synthetic(mappingLookup.getMapping());
         }
         return mappingLookup.newSourceLoader();
+    }
+
+    /**
+     * Build something to load {@code _id}.
+     */
+    public IdLoader newIdLoader() {
+        return mappingLookup.idLoader(indexSettings.getIndexRouting());
     }
 
     /**

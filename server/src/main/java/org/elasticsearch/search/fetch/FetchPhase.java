@@ -18,6 +18,7 @@ import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.index.fieldvisitor.LeafStoredFieldLoader;
 import org.elasticsearch.index.fieldvisitor.StoredFieldLoader;
+import org.elasticsearch.index.mapper.IdLoader;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
 import org.elasticsearch.index.mapper.SourceLoader;
@@ -119,6 +120,7 @@ public class FetchPhase {
             LeafNestedDocuments leafNestedDocuments;
             LeafStoredFieldLoader leafStoredFieldLoader;
             SourceLoader.Leaf leafSourceLoader;
+            IdLoader.Leaf leafIdLoader;
 
             @Override
             protected void setNextReader(LeafReaderContext ctx, int[] docsInLeaf) throws IOException {
@@ -127,6 +129,7 @@ public class FetchPhase {
                 this.leafNestedDocuments = nestedDocuments.getLeafNestedDocuments(ctx);
                 this.leafStoredFieldLoader = storedFieldLoader.getLoader(ctx, docsInLeaf);
                 this.leafSourceLoader = fetchContext.sourceLoader().leaf(ctx.reader(), docsInLeaf);
+                this.leafIdLoader = fetchContext.idLoader().leaf(ctx.reader(), docsInLeaf);
                 for (FetchSubPhaseProcessor processor : processors) {
                     processor.setNextReader(ctx);
                 }
@@ -146,7 +149,8 @@ public class FetchPhase {
                     doc,
                     storedToRequestedFields,
                     ctx,
-                    leafSourceLoader
+                    leafSourceLoader,
+                    leafIdLoader
                 );
                 for (FetchSubPhaseProcessor processor : processors) {
                     processor.process(hit);
@@ -246,7 +250,8 @@ public class FetchPhase {
         int docId,
         Map<String, Set<String>> storedToRequestedFields,
         LeafReaderContext subReaderContext,
-        SourceLoader.Leaf sourceLoader
+        SourceLoader.Leaf sourceLoader,
+        IdLoader.Leaf idLoader
     ) throws IOException {
         if (nestedDocuments.advance(docId - subReaderContext.docBase) == null) {
             return prepareNonNestedHitContext(
@@ -256,7 +261,8 @@ public class FetchPhase {
                 docId,
                 storedToRequestedFields,
                 subReaderContext,
-                sourceLoader
+                sourceLoader,
+                idLoader
             );
         } else {
             return prepareNestedHitContext(
@@ -285,13 +291,14 @@ public class FetchPhase {
         int docId,
         Map<String, Set<String>> storedToRequestedFields,
         LeafReaderContext subReaderContext,
-        SourceLoader.Leaf sourceLoader
+        SourceLoader.Leaf sourceLoader,
+        IdLoader.Leaf idLoader
     ) throws IOException {
         int subDocId = docId - subReaderContext.docBase;
 
         leafStoredFieldLoader.advanceTo(subDocId);
 
-        if (leafStoredFieldLoader.id() == null) {
+        if (leafStoredFieldLoader.isEmpty()) {
             SearchHit hit = new SearchHit(docId, null, null, null);
             Source source = Source.lazy(lazyStoredSourceLoader(profiler, subReaderContext, subDocId));
             return new HitContext(hit, subReaderContext, subDocId, source);
@@ -301,9 +308,9 @@ public class FetchPhase {
                 Map<String, DocumentField> docFields = new HashMap<>();
                 Map<String, DocumentField> metaFields = new HashMap<>();
                 fillDocAndMetaFields(context, leafStoredFieldLoader.storedFields(), storedToRequestedFields, docFields, metaFields);
-                hit = new SearchHit(docId, leafStoredFieldLoader.id(), docFields, metaFields);
+                hit = new SearchHit(docId, idLoader.id(leafStoredFieldLoader, subDocId), docFields, metaFields);
             } else {
-                hit = new SearchHit(docId, leafStoredFieldLoader.id(), emptyMap(), emptyMap());
+                hit = new SearchHit(docId, idLoader.id(leafStoredFieldLoader, subDocId), emptyMap(), emptyMap());
             }
 
             Source source;
