@@ -19,6 +19,8 @@ import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.logging.DeprecationCategory;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.engine.MayHaveBeenIndexedBefore;
 import org.elasticsearch.index.fielddata.FieldData;
 import org.elasticsearch.index.fielddata.FieldDataContext;
 import org.elasticsearch.index.fielddata.IndexFieldData;
@@ -46,6 +48,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * A mapper for the {@code _id} field that reads the from the
@@ -286,5 +289,10 @@ public class ProvidedIdFieldMapper extends IdFieldMapper {
     @Override
     public String reindexId(String id) {
         return id;
+    }
+
+    @Override
+    public MayHaveBeenIndexedBefore buildMayHaveBeenIndexedBefore(Consumer<Engine.Index> assertPrimaryCanOptimizeAddDocument) {
+        return new MayHaveBeenIndexedBefore.Standard(assertPrimaryCanOptimizeAddDocument);
     }
 }

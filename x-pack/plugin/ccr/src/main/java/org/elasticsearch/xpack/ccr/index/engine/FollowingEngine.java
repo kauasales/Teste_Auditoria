@@ -46,6 +46,12 @@ public class FollowingEngine extends InternalEngine {
         super(validateEngineConfig(engineConfig));
     }
 
+    @Override
+    protected void assertPrimaryCanOptimizeAddDocument(Index index) {
+        assert index.version() == 1 && index.versionType() == VersionType.EXTERNAL
+            : "version [" + index.version() + "], type [" + index.versionType() + "]";
+    }
+
     private static EngineConfig validateEngineConfig(final EngineConfig engineConfig) {
         if (CcrSettings.CCR_FOLLOWING_INDEX_SETTING.get(engineConfig.getIndexSettings().getSettings()) == false) {
             throw new IllegalArgumentException("a following engine can not be constructed for a non-following index");
@@ -167,13 +173,6 @@ public class FollowingEngine extends InternalEngine {
 
     @Override
     protected boolean assertNonPrimaryOrigin(final Operation operation) {
-        return true;
-    }
-
-    @Override
-    protected boolean assertPrimaryCanOptimizeAddDocument(final Index index) {
-        assert index.version() == 1 && index.versionType() == VersionType.EXTERNAL
-            : "version [" + index.version() + "], type [" + index.versionType() + "]";
         return true;
     }
 
