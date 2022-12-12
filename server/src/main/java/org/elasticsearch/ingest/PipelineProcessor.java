@@ -16,6 +16,7 @@ import java.util.function.BiConsumer;
 public class PipelineProcessor extends AbstractProcessor {
 
     public static final String TYPE = "pipeline";
+    public static final String CONTEXT_DELIMITER = ":";
 
     private final TemplateScript.Factory pipelineTemplate;
     private final boolean ignoreMissingPipeline;
@@ -35,11 +36,11 @@ public class PipelineProcessor extends AbstractProcessor {
     }
 
     @Override
-    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+    public void execute(IngestDocument ingestDocument, String context, BiConsumer<IngestDocument, Exception> handler) {
         String pipelineName = ingestDocument.renderTemplate(this.pipelineTemplate);
         Pipeline pipeline = ingestService.getPipeline(pipelineName);
         if (pipeline != null) {
-            ingestDocument.executePipeline(pipeline, handler);
+            ingestDocument.executePipeline(pipeline, context + CONTEXT_DELIMITER + pipelineName, handler);
         } else {
             if (ignoreMissingPipeline) {
                 handler.accept(ingestDocument, null);
@@ -50,6 +51,11 @@ public class PipelineProcessor extends AbstractProcessor {
                 );
             }
         }
+    }
+
+    @Override
+    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+        throw new UnsupportedOperationException("Calling execute without context loses context");
     }
 
     Pipeline getPipeline(IngestDocument ingestDocument) {

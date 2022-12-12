@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class IngestStats implements Writeable, ToXContentFragment {
     private final Stats totalStats;
@@ -103,29 +104,59 @@ public class IngestStats implements Writeable, ToXContentFragment {
         totalStats.toXContent(builder, params);
         builder.endObject();
         builder.startObject("pipelines");
+        String pipelineProcessorPrefix = PipelineProcessor.TYPE + PipelineProcessor.CONTEXT_DELIMITER;
+        Map<String, PipelineStat> pipelineStatMap = pipelineStats.stream()
+            .collect(
+                Collectors.toMap(pipelineStat -> pipelineProcessorPrefix + pipelineStat.getPipelineId(), pipelineStat -> pipelineStat)
+            );
         for (PipelineStat pipelineStat : pipelineStats) {
-            builder.startObject(pipelineStat.getPipelineId());
-            pipelineStat.getStats().toXContent(builder, params);
-            List<ProcessorStat> processorStatsForPipeline = processorStats.get(pipelineStat.getPipelineId());
-            builder.startArray("processors");
-            if (processorStatsForPipeline != null) {
-                for (ProcessorStat processorStat : processorStatsForPipeline) {
-                    builder.startObject();
-                    builder.startObject(processorStat.getName());
-                    builder.field("type", processorStat.getType());
-                    builder.startObject("stats");
-                    processorStat.getStats().toXContent(builder, params);
-                    builder.endObject();
-                    builder.endObject();
-                    builder.endObject();
-                }
+            try {
+                builder.startObject(pipelineStat.getPipelineId());
+                pipelineStat.getStats().toXContent(builder, params);
+                processorsToXContent(pipelineStat.getPipelineId(), processorStats, pipelineStatMap, builder, params);
+                builder.endObject();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-            builder.endArray();
-            builder.endObject();
         }
         builder.endObject();
         builder.endObject();
         return builder;
+    }
+
+    private static void processorsToXContent(
+        String context,
+        Map<String, List<ProcessorStat>> processorStats,
+        Map<String, PipelineStat> pipelineStatMap,
+        XContentBuilder builder,
+        Params params
+    ) throws IOException {
+
+        List<ProcessorStat> processorStatsForPipeline = processorStats.get(context);
+        builder.startArray("processors");
+        if (processorStatsForPipeline != null) {
+            for (ProcessorStat processorStat : processorStatsForPipeline) {
+                builder.startObject();
+                builder.startObject(processorStat.getName());
+                builder.field("type", processorStat.getType());
+                builder.startObject("stats");
+                processorStat.getStats().toXContent(builder, params);
+                if (processorStat.getType().equals(PipelineProcessor.TYPE)) {
+                    processorsToXContent(
+                        context + PipelineProcessor.CONTEXT_DELIMITER + processorStat.getName()
+                            .substring(PipelineProcessor.TYPE.length() + 1),
+                        processorStats,
+                        pipelineStatMap,
+                        builder,
+                        params
+                    );
+                }
+                builder.endObject();
+                builder.endObject();
+                builder.endObject();
+            }
+        }
+        builder.endArray();
     }
 
     public Stats getTotalStats() {

@@ -106,7 +106,7 @@ public final class Pipeline {
      * If <code>null</code> is returned then this document will be dropped and not indexed, otherwise
      * this document will be kept and indexed.
      */
-    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+    public void execute(IngestDocument ingestDocument, String context, BiConsumer<IngestDocument, Exception> handler) {
         final long startTimeInNanos = relativeTimeProvider.getAsLong();
         /*
          * Our assumption is that the listener passed to the processor is only ever called once. However, there is no way to enforce
@@ -114,15 +114,24 @@ public final class Pipeline {
          * such as the metrics being wrong. The listenerHasBeenCalled variable is used to make sure that the code in the listener
          * is only executed once.
          */
-        metrics.preIngest();
-        compoundProcessor.execute(ingestDocument, (result, e) -> {
+        final boolean isTopLevelPipeline = isTopLevelPipeline(context);
+        if (isTopLevelPipeline) {
+            metrics.preIngest();
+        }
+        compoundProcessor.execute(ingestDocument, context, (result, e) -> {
             long ingestTimeInNanos = relativeTimeProvider.getAsLong() - startTimeInNanos;
-            metrics.postIngest(ingestTimeInNanos);
-            if (e != null) {
-                metrics.ingestFailed();
+            if (isTopLevelPipeline) {
+                metrics.postIngest(ingestTimeInNanos);
+                if (e != null) {
+                    metrics.ingestFailed();
+                }
             }
             handler.accept(result, e);
         });
+    }
+
+    private boolean isTopLevelPipeline(String context) {
+        return context.contains(PipelineProcessor.CONTEXT_DELIMITER) == false;
     }
 
     /**
