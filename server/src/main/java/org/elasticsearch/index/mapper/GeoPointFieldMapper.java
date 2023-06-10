@@ -193,7 +193,7 @@ public class GeoPointFieldMapper extends AbstractPointGeometryFieldMapper<GeoPoi
         public FieldMapper build(MapperBuilderContext context) {
             Parser<GeoPoint> geoParser = new GeoPointParser(
                 name,
-                (parser) -> GeoUtils.parseGeoPoint(parser, ignoreZValue.get().value()),
+                parser -> GeoUtils.parseGeoPoint(parser, ignoreZValue.get().value()),
                 nullValue.get(),
                 ignoreZValue.get().value(),
                 ignoreMalformed.get().value(),
@@ -505,6 +505,13 @@ public class GeoPointFieldMapper extends AbstractPointGeometryFieldMapper<GeoPoi
         }
     }
 
+    @Override
+    protected void onIgnoredMalformedValue(DocumentParserContext context, XContentParser parser) throws IOException {
+        if (context.isSyntheticSource()) {
+            context.doc().add(IgnoreMalformedStoredValues.storedField(name(), parser));
+        }
+    }
+
     /** GeoPoint parser implementation */
     private static class GeoPointParser extends PointParser<GeoPoint> {
 
@@ -561,11 +568,6 @@ public class GeoPointFieldMapper extends AbstractPointGeometryFieldMapper<GeoPoi
         if (fieldType().hasDocValues() == false) {
             throw new IllegalArgumentException(
                 "field [" + name() + "] of type [" + typeName() + "] doesn't support synthetic source because it doesn't have doc values"
-            );
-        }
-        if (ignoreMalformed()) {
-            throw new IllegalArgumentException(
-                "field [" + name() + "] of type [" + typeName() + "] doesn't support synthetic source because it ignores malformed points"
             );
         }
         if (copyTo.copyToFields().isEmpty() != true) {
