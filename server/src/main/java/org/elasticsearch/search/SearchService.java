@@ -1093,7 +1093,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                 reader,
                 request,
                 shardTarget,
-                threadPool::relativeTimeInMillis,
+                threadPool.relativeTimeInMillisSupplier(),
                 timeout,
                 fetchPhase,
                 lowLevelCancellation,
