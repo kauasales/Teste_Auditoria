@@ -16,7 +16,6 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.InferenceModelFieldType;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MapperBuilderContext;
-import org.elasticsearch.index.mapper.SimpleMappedFieldType;
 import org.elasticsearch.index.mapper.SourceValueFetcher;
 import org.elasticsearch.index.mapper.TextSearchInfo;
 import org.elasticsearch.index.mapper.ValueFetcher;
@@ -40,7 +39,7 @@ public class SemanticTextFieldMapper extends FieldMapper {
         return (SemanticTextFieldMapper) in;
     }
 
-    public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n), notInMultiFields(CONTENT_TYPE));
+    public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n));
 
     private SemanticTextFieldMapper(String simpleName, MappedFieldType mappedFieldType, CopyTo copyTo) {
         super(simpleName, mappedFieldType, MultiFields.empty(), copyTo);
@@ -89,11 +88,15 @@ public class SemanticTextFieldMapper extends FieldMapper {
 
         @Override
         public SemanticTextFieldMapper build(MapperBuilderContext context) {
-            return new SemanticTextFieldMapper(name(), new SemanticTextFieldType(name(), modelId.getValue(), meta.getValue()), copyTo);
+            return new SemanticTextFieldMapper(
+                name,
+                new SemanticTextFieldType(context.buildFullName(name), modelId.getValue(), meta.getValue()),
+                copyTo
+            );
         }
     }
 
-    public static class SemanticTextFieldType extends SimpleMappedFieldType implements InferenceModelFieldType {
+    public static class SemanticTextFieldType extends InferenceModelFieldType {
 
         private final String modelId;
 

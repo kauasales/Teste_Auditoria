@@ -524,7 +524,7 @@ public final class MappingLookup {
         }
     }
 
-    public Map<String, Set<String>> getFieldsForModels() {
+    public Map<String, Map<String, List<String>>> getFieldsForModels() {
         return fieldTypeLookup.getFieldsForModels();
     }
 }

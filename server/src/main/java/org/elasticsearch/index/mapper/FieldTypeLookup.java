@@ -10,10 +10,12 @@ package org.elasticsearch.index.mapper;
 
 import org.elasticsearch.common.regex.Regex;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -39,7 +41,7 @@ final class FieldTypeLookup {
     /**
      * A map from inference model ID to all fields that use the model to generate embeddings.
      */
-    private final Map<String, Set<String>> fieldsForModels;
+    private final Map<String, Map<String, List<String>>> fieldsForModels;
 
     private final int maxParentPathDots;
 
@@ -53,7 +55,8 @@ final class FieldTypeLookup {
         final Map<String, String> fullSubfieldNameToParentPath = new HashMap<>();
         final Map<String, DynamicFieldType> dynamicFieldTypes = new HashMap<>();
         final Map<String, Set<String>> fieldToCopiedFields = new HashMap<>();
-        final Map<String, Set<String>> fieldsForModels = new HashMap<>();
+        final Map<String, Map<String, List<String>>> fieldsForModels = new HashMap<>();
+        final List<InferenceModelFieldType> inferenceModelFieldTypes = new ArrayList<>(fieldMappers.size());
         for (FieldMapper fieldMapper : fieldMappers) {
             String fieldName = fieldMapper.name();
             MappedFieldType fieldType = fieldMapper.fieldType();
@@ -65,6 +68,7 @@ final class FieldTypeLookup {
             for (String targetField : fieldMapper.copyTo().copyToFields()) {
                 Set<String> sourcePath = fieldToCopiedFields.get(targetField);
                 if (sourcePath == null) {
+                    // TODO: Any concerns about copy field order due to set usage?
                     Set<String> copiedFields = new HashSet<>();
                     copiedFields.add(targetField);
                     fieldToCopiedFields.put(targetField, copiedFields);
@@ -72,11 +76,30 @@ final class FieldTypeLookup {
                 fieldToCopiedFields.get(targetField).add(fieldName);
             }
             if (fieldType instanceof InferenceModelFieldType inferenceModelFieldType) {
-                String inferenceModel = inferenceModelFieldType.getInferenceModel();
-                if (inferenceModel != null) {
-                    Set<String> fields = fieldsForModels.computeIfAbsent(inferenceModel, v -> new HashSet<>());
-                    fields.add(fieldName);
-                }
+                // Add this field type to a list of ones we will handle in a second pass, after we have processed the full
+                // multi-field/copy_to context
+                inferenceModelFieldTypes.add(inferenceModelFieldType);
+            }
+        }
+
+        for (InferenceModelFieldType fieldType : inferenceModelFieldTypes) {
+            String fieldName = fieldType.name();
+            String inferenceModel = fieldType.getInferenceModel();
+            if (inferenceModel == null) {
+                throw new IllegalStateException("Field [" + fieldName + "] does not define an inference model");
+            }
+
+            Map<String, List<String>> targetToSourceFieldMap = fieldsForModels.computeIfAbsent(inferenceModel, v -> new HashMap<>());
+            String sourceField = fieldName;
+            if (fullSubfieldNameToParentPath.containsKey(fieldName)) {
+                sourceField = fullSubfieldNameToParentPath.get(fieldName);
+            }
+
+            Set<String> copiedFields = fieldToCopiedFields.get(sourceField);
+            if (copiedFields != null) {
+                targetToSourceFieldMap.put(fieldName, List.copyOf(copiedFields));
+            } else {
+                targetToSourceFieldMap.put(fieldName, List.of(sourceField));
             }
         }
 
@@ -110,7 +133,7 @@ final class FieldTypeLookup {
         // make values into more compact immutable sets to save memory
         fieldToCopiedFields.entrySet().forEach(e -> e.setValue(Set.copyOf(e.getValue())));
         this.fieldToCopiedFields = Map.copyOf(fieldToCopiedFields);
-        fieldsForModels.entrySet().forEach(e -> e.setValue(Set.copyOf(e.getValue())));
+        fieldsForModels.entrySet().forEach(e -> e.setValue(Map.copyOf(e.getValue()))); // TODO: Ensure contained list is immutable
         this.fieldsForModels = Map.copyOf(fieldsForModels);
     }
 
@@ -220,7 +243,7 @@ final class FieldTypeLookup {
         return fieldToCopiedFields.containsKey(resolvedField) ? fieldToCopiedFields.get(resolvedField) : Set.of(resolvedField);
     }
 
-    Map<String, Set<String>> getFieldsForModels() {
+    Map<String, Map<String, List<String>>> getFieldsForModels() {
         return fieldsForModels;
     }
 
