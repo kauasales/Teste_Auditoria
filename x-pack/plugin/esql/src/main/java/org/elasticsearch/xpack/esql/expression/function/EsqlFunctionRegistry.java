@@ -88,6 +88,7 @@ import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvMin;
 import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvSlice;
 import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvSort;
 import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvSum;
+import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvRiemannZeta;
 import org.elasticsearch.xpack.esql.expression.function.scalar.multivalue.MvZip;
 import org.elasticsearch.xpack.esql.expression.function.scalar.nulls.Coalesce;
 import org.elasticsearch.xpack.esql.expression.function.scalar.spatial.SpatialContains;
@@ -296,7 +297,8 @@ public final class EsqlFunctionRegistry extends FunctionRegistry {
                 def(MvSlice.class, MvSlice::new, "mv_slice"),
                 def(MvZip.class, MvZip::new, "mv_zip"),
                 def(MvSum.class, MvSum::new, "mv_sum"),
-                def(Split.class, Split::new, "split") } };
+                def(Split.class, Split::new, "split"),
+                def(MvRiemannZeta.class, MvRiemannZeta::new, "mv_riemann_zeta") } };
     }
 
     @Override
