@@ -1360,6 +1360,11 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         return timestampRange;
     }
 
+    // TODO: bogus placeholder until I can merge the first PR for event.ingested
+    public IndexLongFieldRange getEventIngestedRange() {
+        return timestampRange;
+    }
+
     /**
      * @return whether this index has a time series timestamp range
      */
@@ -2128,6 +2133,12 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
 
         public Builder timestampRange(IndexLongFieldRange timestampRange) {
             this.timestampRange = timestampRange;
+            return this;
+        }
+
+        // TODO: bogus placeholder until I can merge the first PR
+        public Builder eventIngestedRange(IndexLongFieldRange timestampRange) {
+            // this.timestampRange = timestampRange;
             return this;
         }
 
