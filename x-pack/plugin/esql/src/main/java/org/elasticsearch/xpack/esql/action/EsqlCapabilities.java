@@ -89,7 +89,12 @@ public class EsqlCapabilities {
         /**
          * Support for function {@code ST_DISTANCE}. Done in #108764.
          */
-        ST_DISTANCE;
+        ST_DISTANCE,
+
+        /**
+         * Support explicit casting from string literal to DATE_PERIOD or TIME_DURATION.
+         */
+        CAST_STRING_LITERAL_TO_TEMPORAL_AMOUNT;
 
         Cap() {
             snapshotOnly = false;
