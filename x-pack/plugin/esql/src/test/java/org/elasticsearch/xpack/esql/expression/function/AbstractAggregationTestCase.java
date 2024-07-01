@@ -132,16 +132,15 @@ public abstract class AbstractAggregationTestCase extends AbstractFunctionTestCa
         logger.info(
             "Test Values: " + testCase.getData().stream().map(TestCaseSupplier.TypedData::toString).collect(Collectors.joining(","))
         );
-        if (testCase.getExpectedTypeError() != null) {
-            assertTypeResolutionFailure(expression);
+
+        if (checkExpectedErrors(expression)) {
             return;
         }
+
         expression = resolveSurrogates(expression);
 
-        Expression.TypeResolution resolution = expression.typeResolved();
-        if (resolution.unresolved()) {
-            throw new AssertionError("expected resolved " + resolution.message());
-        }
+        // No expected errors, but we want to check that the surrogate is ok
+        checkExpectedErrors(expression);
 
         expression = new FoldNull().rule(expression);
         assertThat(expression.dataType(), equalTo(testCase.expectedType()));

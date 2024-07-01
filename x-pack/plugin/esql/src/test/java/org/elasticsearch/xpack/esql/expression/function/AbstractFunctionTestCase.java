@@ -36,6 +36,9 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.json.JsonXContent;
 import org.elasticsearch.xpack.esql.TestBlockFactory;
+import org.elasticsearch.xpack.esql.capabilities.Validatable;
+import org.elasticsearch.xpack.esql.core.common.Failure;
+import org.elasticsearch.xpack.esql.core.common.Failures;
 import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.FieldAttribute;
@@ -80,6 +83,7 @@ import static org.elasticsearch.compute.data.BlockUtils.toJavaObject;
 import static org.elasticsearch.xpack.esql.SerializationTestUtils.assertSerialization;
 import static org.elasticsearch.xpack.esql.core.util.SpatialCoordinateTypes.CARTESIAN;
 import static org.elasticsearch.xpack.esql.core.util.SpatialCoordinateTypes.GEO;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
@@ -295,6 +299,7 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
                 testCase.getMatcher(),
                 testCase.getExpectedWarnings(),
                 testCase.getExpectedTypeError(),
+                testCase.getExpectedValidationFailures(),
                 testCase.foldingExceptionClass(),
                 testCase.foldingExceptionMessage()
             );
@@ -351,9 +356,59 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
         assertEquals(returnFromSignature, returnTypes);
     }
 
+    /**
+     * Checks expected errors, and returns true if an error was expected.
+     * <p>
+     *     This method also checks that there are not errors if they weren't expected.
+     * </p>
+     */
+    protected boolean checkExpectedErrors(Expression expression) {
+        if (testCase.getExpectedTypeError() != null) {
+            assertTypeResolutionFailure(expression);
+            return true;
+        }
+
+        if (testCase.getExpectedValidationFailures() != null) {
+            assertValidationFailures(expression);
+            return true;
+        }
+
+        var resolution = expression.typeResolved();
+        if (resolution.unresolved()) {
+            throw new AssertionError("expected resolved types: " + resolution.message());
+        }
+
+        var failures = validate(expression);
+        if (failures.hasFailures()) {
+            throw new AssertionError("unexpected validation failures: " + failures);
+        }
+
+        return false;
+    }
+
     protected final void assertTypeResolutionFailure(Expression expression) {
         assertTrue("expected unresolved", expression.typeResolved().unresolved());
         assertThat(expression.typeResolved().message(), equalTo(testCase.getExpectedTypeError()));
+    }
+
+    protected final void assertValidationFailures(Expression expression) {
+        var failures = validate(expression);
+        var failureMessages = failures.failures().stream().map(Failure::message).toList();
+
+        assertThat(failureMessages, containsInAnyOrder(testCase.getExpectedValidationFailures()));
+    }
+
+    /**
+     * Validates a possible {@link Validatable} expression.
+     */
+    protected Failures validate(Expression expression) {
+        Failures failures = new Failures();
+
+        if (expression instanceof Validatable v) {
+            v.validate(failures);
+        }
+
+        return failures;
     }
 
     @AfterClass
