@@ -9,6 +9,7 @@
 package org.elasticsearch.datastreams;
 
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.settings.SecureString;
@@ -25,6 +26,7 @@ import org.junit.ClassRule;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This base class provides the boilerplate to simplify the development of integration tests.
@@ -104,12 +106,26 @@ public abstract class AbstractDataStreamIT extends ESRestTestCase {
         assertOK(client.performRequest(request));
     }
 
+    static void bulk(RestClient client, String dataStreamName, List<String> bulkLines) throws IOException {
+        Request request = new Request("POST", "/" + dataStreamName + "/_bulk?refresh=true&pretty&error_trace");
+        request.setJsonEntity(bulkLines.stream().map(s -> s.replace("\n", "")).collect(Collectors.joining("\n")) + "\n");
+        Response response = client.performRequest(request);
+        assertOK(response);
+        Map<String, Object> bulkResponse = entityAsMap(response.getEntity());
+        assertFalse("Bulk response contains errors: " + bulkResponse, (boolean) bulkResponse.get("errors"));
+    }
+
     @SuppressWarnings("unchecked")
     static List<Object> searchDocs(RestClient client, String dataStreamName, String query) throws IOException {
+        Map<String, Object> hits = (Map<String, Object>) search(client, dataStreamName, query).get("hits");
+        return (List<Object>) hits.get("hits");
+    }
+
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> search(RestClient client, String dataStreamName, String query) throws IOException {
         Request request = new Request("GET", "/" + dataStreamName + "/_search");
         request.setJsonEntity(query);
-        Map<String, Object> hits = (Map<String, Object>) entityAsMap(client.performRequest(request)).get("hits");
-        return (List<Object>) hits.get("hits");
+        return entityAsMap(client.performRequest(request));
     }
 
     @SuppressWarnings("unchecked")
