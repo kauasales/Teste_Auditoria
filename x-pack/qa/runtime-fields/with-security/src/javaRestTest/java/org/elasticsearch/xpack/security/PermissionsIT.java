@@ -290,7 +290,7 @@ public class PermissionsIT extends ESRestTestCase {
         painlessExecute.setJsonEntity("""
             {
               "script": {
-                "source": "emit(doc['@timestamp'].value.dayOfWeekEnum.getDisplayName(TextStyle.FULL, Locale.ROOT));"
+                "source": "emit(doc['@timestamp'].value.dayOfWeekEnum.getDisplayName(TextStyle.FULL, Locale.ENGLISH));"
               },
               "context": "keyword_field",
               "context_setup": {
@@ -303,7 +303,7 @@ public class PermissionsIT extends ESRestTestCase {
             """);
         Response response = client().performRequest(painlessExecute);
         assertOK(response);
-        assertThat(EntityUtils.toString(response.getEntity()), containsString("Thursday"));
+        assertThat(EntityUtils.toString(response.getEntity()), containsString("Thu"));
     }
 
     public void testPainlessExecuteWithoutIndexRequiresClusterPrivileges() {
