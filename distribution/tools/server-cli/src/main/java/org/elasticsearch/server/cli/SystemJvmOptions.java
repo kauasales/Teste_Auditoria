@@ -11,6 +11,7 @@ package org.elasticsearch.server.cli;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.core.UpdateForV9;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -65,10 +66,20 @@ final class SystemJvmOptions {
                 "-Dlog4j2.disable.jmx=true",
                 "-Dlog4j2.formatMsgNoLookups=true",
                 /*
-                 * Due to internationalization enhancements in JDK 9 Elasticsearch need to set the provider to COMPAT otherwise time/date
-                 * parsing will break in an incompatible way for some date patterns and locales.
+                 * The history of this option is:
+                 * - In JDK 9, the default locale data provider was changed to CLDR. The previous data provider is available through
+                 * COMPAT, which we set to maintain existing locale behavior for ingest and date formatting.
+                 * COMPAT was marked as deprecated.
+                 * - SPI was added by #48209 to load IsoCalendarDataProvider to always set the first day of week as Monday.
+                 * - In JDK21, COMPAT was marked for removal, and then removed in JDK23. This re-broke our date formatting.
+                 * To fix this again, and continue to maintain our existing date formats, CompatCalendarNameProvider,
+                 * loaded by the SPI provider, was added by #109465 to apply the differences between CLDR and COMPAT
+                 * so that existing behaviour is again maintained.
+                 * This is because we can only really change our date formats on major versions. Despite coming from the JDK,
+                 * it is still part of our interface to our users, which needs to be maintained as-is.
+                 * For compatibility, we continue to use COMPAT rather than CLDR for java versions <= 22
                  */
-                "-Djava.locale.providers=SPI,COMPAT",
+                "-Djava.locale.providers=" + getLocaleProviders(),
                 /*
                  * Temporarily suppress illegal reflective access in searchable snapshots shared cache preallocation; this is temporary
                  * while we explore alternatives. See org.elasticsearch.xpack.searchablesnapshots.preallocate.Preallocate.
@@ -137,6 +148,11 @@ final class SystemJvmOptions {
             return "--enable-native-access=org.elasticsearch.nativeaccess,org.apache.lucene.core";
         }
         return "";
+    }
+
+    @UpdateForV9    // only use CLDR in v9+
+    private static String getLocaleProviders() {
+        return Runtime.version().feature() >= 23 ? "SPI,CLDR" : "SPI,COMPAT";
     }
 
     /*
