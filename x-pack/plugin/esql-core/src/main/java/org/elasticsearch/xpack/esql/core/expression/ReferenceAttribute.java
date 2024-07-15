@@ -27,9 +27,17 @@ public class ReferenceAttribute extends TypedAttribute {
     );
 
     public ReferenceAttribute(Source source, String name, DataType dataType) {
-        this(source, name, dataType, null, Nullability.FALSE, null, false);
+        this(source, name, dataType, Nullability.FALSE, null, false);
     }
 
+    public ReferenceAttribute(Source source, String name, DataType dataType, Nullability nullability, NameId id, boolean synthetic) {
+        super(source, name, dataType, nullability, id, synthetic);
+    }
+
+    @Deprecated
+    /**
+     * Old constructor from when this had a qualifier string. Still needed to not break serialization.
+     */
     public ReferenceAttribute(
         Source source,
         String name,
@@ -39,7 +47,7 @@ public class ReferenceAttribute extends TypedAttribute {
         NameId id,
         boolean synthetic
     ) {
-        super(source, name, dataType, qualifier, nullability, id, synthetic);
+        super(source, name, dataType, nullability, id, synthetic);
     }
 
     @SuppressWarnings("unchecked")
@@ -68,7 +76,8 @@ public class ReferenceAttribute extends TypedAttribute {
         Source.EMPTY.writeTo(out);
         out.writeString(name());
         dataType().writeTo(out);
-        out.writeOptionalString(qualifier());
+        // We used to write the qualifier here. We can still do if needed in the future.
+        out.writeOptionalString(null);
         out.writeEnum(nullable());
         id().writeTo(out);
         out.writeBoolean(synthetic());
@@ -80,21 +89,30 @@ public class ReferenceAttribute extends TypedAttribute {
     }
 
     @Override
-    protected Attribute clone(
-        Source source,
-        String name,
-        DataType dataType,
-        String qualifier,
-        Nullability nullability,
-        NameId id,
-        boolean synthetic
-    ) {
-        return new ReferenceAttribute(source, name, dataType, qualifier, nullability, id, synthetic);
+    protected Attribute clone(Source source, String name, DataType dataType, Nullability nullability, NameId id, boolean synthetic) {
+        return new ReferenceAttribute(source, name, dataType, null, nullability, id, synthetic);
     }
 
     @Override
     protected NodeInfo<ReferenceAttribute> info() {
-        return NodeInfo.create(this, ReferenceAttribute::new, name(), dataType(), qualifier(), nullable(), id(), synthetic());
+        return NodeInfo.create(
+            this,
+            (source, name, dataType, qualifier, nullability, id, synthetic) -> new ReferenceAttribute(
+                source,
+                name,
+                dataType,
+                qualifier,
+                nullability,
+                id,
+                synthetic
+            ),
+            name(),
+            dataType(),
+            (String) null,
+            nullable(),
+            id(),
+            synthetic()
+        );
     }
 
     @Override

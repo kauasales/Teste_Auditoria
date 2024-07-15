@@ -32,6 +32,7 @@ public final class Alias extends NamedExpression {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(NamedExpression.class, "Alias", Alias::new);
 
     private final Expression child;
+    // TODO: unused, remove
     private final String qualifier;
 
     /**
@@ -124,8 +125,8 @@ public final class Alias extends NamedExpression {
     public Attribute toAttribute() {
         if (lazyAttribute == null) {
             lazyAttribute = resolved()
-                ? new ReferenceAttribute(source(), name(), dataType(), qualifier, nullable(), id(), synthetic())
-                : new UnresolvedAttribute(source(), name(), qualifier);
+                ? new ReferenceAttribute(source(), name(), dataType(), nullable(), id(), synthetic())
+                : new UnresolvedAttribute(source(), name());
         }
         return lazyAttribute;
     }
