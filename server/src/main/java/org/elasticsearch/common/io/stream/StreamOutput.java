@@ -1136,7 +1136,10 @@ public abstract class StreamOutput extends OutputStream {
 
     /**
      * Writes an enum with type E based on its ordinal value
+     * @deprecated give each {@link Writeable} enum an {@code byte id} member
+     *             and serialize that
      */
+    @Deprecated
     public <E extends Enum<E>> void writeEnum(E enumValue) throws IOException {
         assert enumValue instanceof XContentType == false : "XContentHelper#writeTo should be used for XContentType serialisation";
         writeVInt(enumValue.ordinal());
@@ -1144,7 +1147,10 @@ public abstract class StreamOutput extends OutputStream {
 
     /**
      * Writes an optional enum with type E based on its ordinal value
+     * @deprecated give each {@link Writeable} enum an {@code byte id} member
+     *             and serialize that
      */
+    @Deprecated
     public <E extends Enum<E>> void writeOptionalEnum(@Nullable E enumValue) throws IOException {
         if (enumValue == null) {
             writeBoolean(false);
