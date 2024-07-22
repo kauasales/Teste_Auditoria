@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.inference;
 
 import org.apache.lucene.util.SetOnce;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.MappedActionFilter;
@@ -26,6 +27,7 @@ import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.indices.SystemIndexDescriptor;
 import org.elasticsearch.inference.InferenceServiceExtension;
 import org.elasticsearch.inference.InferenceServiceRegistry;
+import org.elasticsearch.inference.TaskType;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.MapperPlugin;
@@ -65,10 +67,16 @@ import org.elasticsearch.xpack.inference.rest.RestGetInferenceDiagnosticsAction;
 import org.elasticsearch.xpack.inference.rest.RestGetInferenceModelAction;
 import org.elasticsearch.xpack.inference.rest.RestInferenceAction;
 import org.elasticsearch.xpack.inference.rest.RestPutInferenceModelAction;
+import org.elasticsearch.xpack.inference.services.ConfigurationParseContext;
 import org.elasticsearch.xpack.inference.services.ServiceComponents;
 import org.elasticsearch.xpack.inference.services.azureaistudio.AzureAiStudioService;
 import org.elasticsearch.xpack.inference.services.azureopenai.AzureOpenAiService;
 import org.elasticsearch.xpack.inference.services.cohere.CohereService;
+import org.elasticsearch.xpack.inference.services.elastic.ElasticInferenceService;
+import org.elasticsearch.xpack.inference.services.elastic.ElasticInferenceServiceComponents;
+import org.elasticsearch.xpack.inference.services.elastic.ElasticInferenceServiceFeature;
+import org.elasticsearch.xpack.inference.services.elastic.ElasticInferenceServiceSettings;
+import org.elasticsearch.xpack.inference.services.elastic.ElasticInferenceServiceSparseEmbeddingsModel;
 import org.elasticsearch.xpack.inference.services.elasticsearch.ElasticsearchInternalService;
 import org.elasticsearch.xpack.inference.services.elser.ElserInternalService;
 import org.elasticsearch.xpack.inference.services.googleaistudio.GoogleAiStudioService;
@@ -87,6 +95,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Collections.singletonList;
+import static org.elasticsearch.xpack.inference.services.ServiceFields.MODEL_ID;
 
 public class InferencePlugin extends Plugin implements ActionPlugin, ExtensiblePlugin, SystemIndexPlugin, MapperPlugin, SearchPlugin {
 
@@ -111,7 +120,7 @@ public class InferencePlugin extends Plugin implements ActionPlugin, ExtensibleP
     private final Settings settings;
     private final SetOnce<HttpRequestSender.Factory> httpFactory = new SetOnce<>();
     private final SetOnce<ServiceComponents> serviceComponents = new SetOnce<>();
-
+    private final SetOnce<ElasticInferenceServiceComponents> eisComponents = new SetOnce<>();
     private final SetOnce<InferenceServiceRegistry> inferenceServiceRegistry = new SetOnce<>();
     private final SetOnce<ShardBulkInferenceActionFilter> shardBulkInferenceActionFilter = new SetOnce<>();
     private List<InferenceServiceExtension> inferenceServiceExtensions;
@@ -171,6 +180,15 @@ public class InferencePlugin extends Plugin implements ActionPlugin, ExtensibleP
         var inferenceServices = new ArrayList<>(inferenceServiceExtensions);
         inferenceServices.add(this::getInferenceServiceFactories);
 
+        if (ElasticInferenceServiceFeature.ELASTIC_INFERENCE_SERVICE_FEATURE_FLAG.isEnabled()) {
+            ElasticInferenceServiceSettings eisSettings = new ElasticInferenceServiceSettings(settings);
+            eisComponents.set(new ElasticInferenceServiceComponents(eisSettings.getEisGatewayUrl()));
+
+            inferenceServices.add(
+                () -> List.of(context -> new ElasticInferenceService(httpFactory.get(), serviceComponents.get(), eisComponents.get()))
+            );
+        }
+
         var factoryContext = new InferenceServiceExtension.InferenceServiceFactoryContext(services.client());
         // This must be done after the HttpRequestSenderFactory is created so that the services can get the
         // reference correctly
@@ -190,17 +208,20 @@ public class InferencePlugin extends Plugin implements ActionPlugin, ExtensibleP
     }
 
     public List<InferenceServiceExtension.Factory> getInferenceServiceFactories() {
-        return List.of(
-            ElserInternalService::new,
-            context -> new HuggingFaceElserService(httpFactory.get(), serviceComponents.get()),
-            context -> new HuggingFaceService(httpFactory.get(), serviceComponents.get()),
-            context -> new OpenAiService(httpFactory.get(), serviceComponents.get()),
-            context -> new CohereService(httpFactory.get(), serviceComponents.get()),
-            context -> new AzureOpenAiService(httpFactory.get(), serviceComponents.get()),
-            context -> new AzureAiStudioService(httpFactory.get(), serviceComponents.get()),
-            context -> new GoogleAiStudioService(httpFactory.get(), serviceComponents.get()),
-            context -> new MistralService(httpFactory.get(), serviceComponents.get()),
-            ElasticsearchInternalService::new
+        // must be mutable to be able to add elements
+        return new ArrayList<>(
+            List.of(
+                ElserInternalService::new,
+                context -> new HuggingFaceElserService(httpFactory.get(), serviceComponents.get()),
+                context -> new HuggingFaceService(httpFactory.get(), serviceComponents.get()),
+                context -> new OpenAiService(httpFactory.get(), serviceComponents.get()),
+                context -> new CohereService(httpFactory.get(), serviceComponents.get()),
+                context -> new AzureOpenAiService(httpFactory.get(), serviceComponents.get()),
+                context -> new AzureAiStudioService(httpFactory.get(), serviceComponents.get()),
+                context -> new GoogleAiStudioService(httpFactory.get(), serviceComponents.get()),
+                context -> new MistralService(httpFactory.get(), serviceComponents.get()),
+                ElasticsearchInternalService::new
+            )
         );
     }
 
@@ -259,6 +280,7 @@ public class InferencePlugin extends Plugin implements ActionPlugin, ExtensibleP
             HttpClientManager.getSettings(),
             ThrottlerManager.getSettings(),
             RetrySettings.getSettingsDefinitions(),
+            ElasticInferenceServiceSettings.getSettingsDefinitions(),
             Truncator.getSettings(),
             RequestExecutorServiceSettings.getSettingsDefinitions(),
             List.of(SKIP_VALIDATE_AND_START)

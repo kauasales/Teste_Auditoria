@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 
+import static org.elasticsearch.xpack.inference.services.elser.ElserModelsTests.randomElserModel;
 import static org.hamcrest.Matchers.containsString;
 
 public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTestCase<ElserInternalServiceSettings> {
@@ -25,7 +26,7 @@ public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTe
         return new ElserInternalServiceSettings(
             randomIntBetween(1, 4),
             randomIntBetween(1, 2),
-            randomFrom(ElserInternalService.VALID_ELSER_MODEL_IDS)
+            randomElserModel()
         );
     }
 
@@ -126,7 +127,7 @@ public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTe
             case 0 -> new ElserInternalServiceSettings(instance.getNumAllocations() + 1, instance.getNumThreads(), instance.getModelId());
             case 1 -> new ElserInternalServiceSettings(instance.getNumAllocations(), instance.getNumThreads() + 1, instance.getModelId());
             case 2 -> {
-                var versions = new HashSet<>(ElserInternalService.VALID_ELSER_MODEL_IDS);
+                var versions = new HashSet<>(ElserModels.VALID_ELSER_MODEL_IDS);
                 versions.remove(instance.getModelId());
                 yield new ElserInternalServiceSettings(instance.getNumAllocations(), instance.getNumThreads(), versions.iterator().next());
             }

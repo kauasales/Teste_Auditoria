@@ -64,17 +64,6 @@ public class ElserInternalService implements InferenceService {
 
     public static final String NAME = "elser";
 
-    static final String ELSER_V1_MODEL = ".elser_model_1";
-    // Default non platform specific v2 model
-    static final String ELSER_V2_MODEL = ".elser_model_2";
-    static final String ELSER_V2_MODEL_LINUX_X86 = ".elser_model_2_linux-x86_64";
-
-    public static Set<String> VALID_ELSER_MODEL_IDS = Set.of(
-        ElserInternalService.ELSER_V1_MODEL,
-        ElserInternalService.ELSER_V2_MODEL,
-        ElserInternalService.ELSER_V2_MODEL_LINUX_X86
-    );
-
     private static final String OLD_MODEL_ID_FIELD_NAME = "model_version";
 
     private final OriginSettingClient client;
@@ -136,10 +125,10 @@ public class ElserInternalService implements InferenceService {
         boolean homogenous = modelArchitectures.size() == 1;
         if (homogenous && modelArchitectures.iterator().next().equals("linux-x86_64")) {
             // Use the hardware optimized model
-            return ELSER_V2_MODEL_LINUX_X86;
+            return ElserModels.ELSER_V2_MODEL_LINUX_X86;
         } else {
             // default to the platform-agnostic model
-            return ELSER_V2_MODEL;
+            return ElserModels.ELSER_V2_MODEL;
         }
     }
 
