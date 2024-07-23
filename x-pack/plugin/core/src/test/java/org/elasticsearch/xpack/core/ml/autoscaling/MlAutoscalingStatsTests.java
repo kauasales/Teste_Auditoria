@@ -17,16 +17,16 @@ public class MlAutoscalingStatsTests extends AbstractWireSerializingTestCase<MlA
     public static MlAutoscalingStats randomAutoscalingResources() {
         return new MlAutoscalingStats(
             randomIntBetween(0, 100), // nodes
-            randomNonNegativeLong(), // perNodeMemoryInBytes
+            randomNonNegativeLong(), // existingPerNodeMemoryBytes
             randomNonNegativeLong(), // modelMemoryInBytes
-            randomIntBetween(0, 100), // processorsSum
+            randomIntBetween(0, 100), // existingTotalProcessorsInUse
             randomIntBetween(0, 100), // minNodes
-            randomNonNegativeLong(), // extraSingleNodeModelMemoryInBytes
-            randomIntBetween(0, 100), // extraSingleNodeProcessors
-            randomNonNegativeLong(), // extraModelMemoryInBytes
+            randomNonNegativeLong(), // extraPerNodeMemoryBytes
+            randomIntBetween(0, 100), // extraPerNodeNodeProcessors
+            randomNonNegativeLong(), // extraModelMemoryBytes
             randomIntBetween(0, 100), // extraProcessors
-            randomNonNegativeLong(), // removeNodeMemoryInBytes
-            randomNonNegativeLong() // perNodeMemoryOverheadInBytes
+            randomNonNegativeLong(), // removeNodeMemoryBytes
+            randomNonNegativeLong() // perNodeMemoryOverheadBytes
         );
     }
 
