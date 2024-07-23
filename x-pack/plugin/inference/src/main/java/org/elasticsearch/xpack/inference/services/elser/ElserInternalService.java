@@ -111,18 +111,6 @@ public class ElserInternalService extends BaseElasticsearchInternalService {
         }
     }
 
-    private static String selectDefaultModelVersionBasedOnClusterArchitecture(Set<String> modelArchitectures) {
-        // choose a default model ID based on the cluster architecture
-        boolean homogenous = modelArchitectures.size() == 1;
-        if (homogenous && modelArchitectures.iterator().next().equals("linux-x86_64")) {
-            // Use the hardware optimized model
-            return ELSER_V2_MODEL_LINUX_X86;
-        } else {
-            // default to the platform-agnostic model
-            return ELSER_V2_MODEL;
-        }
-    }
-
     @Override
     public ElserInternalModel parsePersistedConfigWithSecrets(
         String inferenceEntityId,
