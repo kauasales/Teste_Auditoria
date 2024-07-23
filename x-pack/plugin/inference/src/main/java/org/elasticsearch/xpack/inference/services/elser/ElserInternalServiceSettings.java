@@ -39,9 +39,9 @@ public class ElserInternalServiceSettings extends InternalServiceSettings {
 
         validateParameters(numAllocations, validationException, numThreads);
 
-        String model_id = ServiceUtils.removeAsType(map, MODEL_ID, String.class);
-        if (model_id != null && ElserModels.isValidModel(model_id) == false) {
-            validationException.addValidationError("unknown ELSER model id [" + model_id + "]");
+        String modelId = ServiceUtils.removeAsType(map, MODEL_ID, String.class);
+        if (modelId != null && ElserModels.isValidModel(modelId) == false) {
+            validationException.addValidationError("unknown ELSER model id [" + modelId + "]");
         }
 
         if (validationException.validationErrors().isEmpty() == false) {
@@ -56,7 +56,7 @@ public class ElserInternalServiceSettings extends InternalServiceSettings {
         };
         builder.setNumAllocations(numAllocations);
         builder.setNumThreads(numThreads);
-        builder.setModelId(model_id);
+        builder.setModelId(modelId);
         return builder;
     }
 
