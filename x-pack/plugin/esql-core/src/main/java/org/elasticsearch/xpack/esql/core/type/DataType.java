@@ -14,22 +14,23 @@ import org.elasticsearch.index.mapper.SourceFieldMapper;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public enum DataType {
-    UNSUPPORTED(builder(null).typeName("UNSUPPORTED")),
-    NULL(builder("null")),
-    BOOLEAN(builder("boolean").size(1)),
+    UNSUPPORTED(builder().typeName("UNSUPPORTED").unknownSize()),
+    NULL(builder().esType("null").estimatedSize(0)),
+    BOOLEAN(builder().esType("boolean").estimatedSize(1)),
 
     /**
      * These are numeric fields labeled as metric counters in time-series indices. Although stored
@@ -38,37 +39,42 @@ public enum DataType {
      * These fields are strictly for use in retrieval from indices, rate aggregation, and casting to their
      * parent numeric type.
      */
-    COUNTER_LONG(builder("counter_long").size(Long.BYTES).docValues().counter()),
-    COUNTER_INTEGER(builder("counter_integer").size(Integer.BYTES).docValues().counter()),
-    COUNTER_DOUBLE(builder("counter_double").size(Double.BYTES).docValues().counter()),
+    COUNTER_LONG(builder().esType("counter_long").estimatedSize(Long.BYTES).docValues().counter()),
+    COUNTER_INTEGER(builder().esType("counter_integer").estimatedSize(Integer.BYTES).docValues().counter()),
+    COUNTER_DOUBLE(builder().esType("counter_double").estimatedSize(Double.BYTES).docValues().counter()),
 
-    LONG(builder("long").size(Long.BYTES).integer().docValues().counter(COUNTER_LONG)),
-    INTEGER(builder("integer").size(Integer.BYTES).integer().docValues().counter(COUNTER_INTEGER)),
-    SHORT(builder("short").size(Short.BYTES).integer().docValues().widenSmallNumeric(INTEGER)),
-    BYTE(builder("byte").size(Byte.BYTES).integer().docValues().widenSmallNumeric(INTEGER)),
-    UNSIGNED_LONG(builder("unsigned_long").size(Long.BYTES).integer().docValues()),
-    DOUBLE(builder("double").size(Double.BYTES).rational().docValues().counter(COUNTER_DOUBLE)),
-    FLOAT(builder("float").size(Float.BYTES).rational().docValues().widenSmallNumeric(DOUBLE)),
-    HALF_FLOAT(builder("half_float").size(Float.BYTES).rational().docValues().widenSmallNumeric(DOUBLE)),
-    SCALED_FLOAT(builder("scaled_float").size(Long.BYTES).rational().docValues().widenSmallNumeric(DOUBLE)),
+    LONG(builder().esType("long").estimatedSize(Long.BYTES).wholeNumber().docValues().counter(COUNTER_LONG)),
+    INTEGER(builder().esType("integer").estimatedSize(Integer.BYTES).wholeNumber().docValues().counter(COUNTER_INTEGER)),
+    SHORT(builder().esType("short").estimatedSize(Short.BYTES).wholeNumber().docValues().widenSmallNumeric(INTEGER)),
+    BYTE(builder().esType("byte").estimatedSize(Byte.BYTES).wholeNumber().docValues().widenSmallNumeric(INTEGER)),
+    UNSIGNED_LONG(builder().esType("unsigned_long").estimatedSize(Long.BYTES).wholeNumber().docValues()),
+    DOUBLE(builder().esType("double").estimatedSize(Double.BYTES).rationalNumber().docValues().counter(COUNTER_DOUBLE)),
+    FLOAT(builder().esType("float").estimatedSize(Float.BYTES).rationalNumber().docValues().widenSmallNumeric(DOUBLE)),
+    HALF_FLOAT(builder().esType("half_float").estimatedSize(Float.BYTES).rationalNumber().docValues().widenSmallNumeric(DOUBLE)),
+    SCALED_FLOAT(builder().esType("scaled_float").estimatedSize(Long.BYTES).rationalNumber().docValues().widenSmallNumeric(DOUBLE)),
 
-    KEYWORD(builder("keyword").unknownSize().docValues()),
-    TEXT(builder("text").unknownSize()),
-    DATETIME(builder("date").typeName("DATETIME").size(Long.BYTES).docValues()),
-    IP(builder("ip").size(45).docValues()),
-    VERSION(builder("version").unknownSize().docValues()),
-    OBJECT(builder("object")),
-    NESTED(builder("nested")),
-    SOURCE(builder(SourceFieldMapper.NAME).unknownSize()),
-    DATE_PERIOD(builder(null).typeName("DATE_PERIOD").size(3 * Integer.BYTES)),
-    TIME_DURATION(builder(null).typeName("TIME_DURATION").size(Integer.BYTES + Long.BYTES)),
-    GEO_POINT(builder("geo_point").size(Double.BYTES * 2).docValues()),
-    CARTESIAN_POINT(builder("cartesian_point").size(Double.BYTES * 2).docValues()),
-    CARTESIAN_SHAPE(builder("cartesian_shape").unknownSize().docValues()),
-    GEO_SHAPE(builder("geo_shape").unknownSize().docValues()),
+    KEYWORD(builder().esType("keyword").unknownSize().docValues()),
+    TEXT(builder().esType("text").unknownSize()),
+    DATETIME(builder().esType("date").typeName("DATETIME").estimatedSize(Long.BYTES).docValues()),
+    // IP addresses, both IPv4 and IPv6, are encoded using 16 bytes.
+    IP(builder().esType("ip").estimatedSize(16).docValues()),
+    // 8.15.2-SNAPSHOT is 15 bytes, most are shorter, some can be longer
+    VERSION(builder().esType("version").estimatedSize(15).docValues()),
+    OBJECT(builder().esType("object").unknownSize()),
+    NESTED(builder().esType("nested").unknownSize()),
+    SOURCE(builder().esType(SourceFieldMapper.NAME).unknownSize()),
+    DATE_PERIOD(builder().typeName("DATE_PERIOD").estimatedSize(3 * Integer.BYTES)),
+    TIME_DURATION(builder().typeName("TIME_DURATION").estimatedSize(Integer.BYTES + Long.BYTES)),
+    // WKB for points is typically 21 bytes.
+    GEO_POINT(builder().esType("geo_point").estimatedSize(21).docValues()),
+    CARTESIAN_POINT(builder().esType("cartesian_point").estimatedSize(21).docValues()),
+    // wild estimate for size, based on some test data (airport_city_boundaries)
+    CARTESIAN_SHAPE(builder().esType("cartesian_shape").estimatedSize(200).docValues()),
+    GEO_SHAPE(builder().esType("geo_shape").estimatedSize(200).docValues()),
 
-    DOC_DATA_TYPE(builder("_doc").size(Integer.BYTES * 3)),
-    TSID_DATA_TYPE(builder("_tsid").unknownSize().docValues());
+    DOC_DATA_TYPE(builder().esType("_doc").estimatedSize(Integer.BYTES * 3)),
+    TSID_DATA_TYPE(builder().esType("_tsid").unknownSize().docValues()),
+    PARTIAL_AGG(builder().esType("partial_agg").unknownSize());
 
     private final String typeName;
 
@@ -76,17 +82,17 @@ public enum DataType {
 
     private final String esType;
 
-    private final int size;
+    private final Optional<Integer> estimatedSize;
 
     /**
-     * True if the type represents an integer number
+     * True if the type represents a "whole number", as in, does <strong>not</strong> have a decimal part.
      */
-    private final boolean isInteger;
+    private final boolean isWholeNumber;
 
     /**
-     * True if the type represents a rational number
+     * True if the type represents a "rational number", as in, <strong>does</strong> have a decimal part.
      */
-    private final boolean isRational;
+    private final boolean isRationalNumber;
 
     /**
      * True if the type supports doc values by default
@@ -112,49 +118,23 @@ public enum DataType {
 
     DataType(Builder builder) {
         String typeString = builder.typeName != null ? builder.typeName : builder.esType;
+        assert builder.estimatedSize != null : "Missing size for type " + typeString;
         this.typeName = typeString.toLowerCase(Locale.ROOT);
         this.name = typeString.toUpperCase(Locale.ROOT);
         this.esType = builder.esType;
-        this.size = builder.size;
-        this.isInteger = builder.isInteger;
-        this.isRational = builder.isRational;
+        this.estimatedSize = builder.estimatedSize;
+        this.isWholeNumber = builder.isWholeNumber;
+        this.isRationalNumber = builder.isRationalNumber;
         this.docValues = builder.docValues;
         this.isCounter = builder.isCounter;
         this.widenSmallNumeric = builder.widenSmallNumeric;
         this.counter = builder.counter;
     }
 
-    private static final Collection<DataType> TYPES = Stream.of(
-        UNSUPPORTED,
-        NULL,
-        BOOLEAN,
-        BYTE,
-        SHORT,
-        INTEGER,
-        LONG,
-        UNSIGNED_LONG,
-        DOUBLE,
-        FLOAT,
-        HALF_FLOAT,
-        SCALED_FLOAT,
-        KEYWORD,
-        TEXT,
-        DATETIME,
-        IP,
-        VERSION,
-        OBJECT,
-        NESTED,
-        SOURCE,
-        DATE_PERIOD,
-        TIME_DURATION,
-        GEO_POINT,
-        CARTESIAN_POINT,
-        CARTESIAN_SHAPE,
-        GEO_SHAPE,
-        COUNTER_LONG,
-        COUNTER_INTEGER,
-        COUNTER_DOUBLE
-    ).sorted(Comparator.comparing(DataType::typeName)).toList();
+    private static final Collection<DataType> TYPES = Arrays.stream(values())
+        .filter(d -> d != DOC_DATA_TYPE && d != TSID_DATA_TYPE)
+        .sorted(Comparator.comparing(DataType::typeName))
+        .toList();
 
     private static final Map<String, DataType> NAME_TO_TYPE = TYPES.stream().collect(toUnmodifiableMap(DataType::typeName, t -> t));
 
@@ -249,23 +229,8 @@ public enum DataType {
         return t.isNumeric() || isNull(t);
     }
 
-    public static boolean isSigned(DataType t) {
-        return t.isNumeric() && t.equals(UNSIGNED_LONG) == false;
-    }
-
     public static boolean isDateTime(DataType type) {
         return type == DATETIME;
-    }
-
-    public static boolean areCompatible(DataType left, DataType right) {
-        if (left == right) {
-            return true;
-        } else {
-            return (left == NULL || right == NULL)
-                || (isString(left) && isString(right))
-                || (left.isNumeric() && right.isNumeric())
-                || (isDateTime(left) && isDateTime(right));
-        }
     }
 
     public String nameUpper() {
@@ -280,20 +245,40 @@ public enum DataType {
         return esType;
     }
 
-    public boolean isInteger() {
-        return isInteger;
+    /**
+     * The name we give to types on the response.
+     */
+    public String outputType() {
+        return esType == null ? "unsupported" : esType;
     }
 
-    public boolean isRational() {
-        return isRational;
+    /**
+     * True if the type represents a "whole number", as in, does <strong>not</strong> have a decimal part.
+     */
+    public boolean isWholeNumber() {
+        return isWholeNumber;
     }
 
+    /**
+     * True if the type represents a "rational number", as in, <strong>does</strong> have a decimal part.
+     */
+    public boolean isRationalNumber() {
+        return isRationalNumber;
+    }
+
+    /**
+     * Does this data type represent <strong>any</strong> number?
+     */
     public boolean isNumeric() {
-        return isInteger || isRational;
+        return isWholeNumber || isRationalNumber;
     }
 
-    public int size() {
-        return size;
+    /**
+     * @return the estimated size, in bytes, of this data type.  If there's no reasonable way to estimate the size,
+     *         the optional will be empty.
+     */
+    public Optional<Integer> estimatedSize() {
+        return estimatedSize;
     }
 
     public boolean hasDocValues() {
@@ -349,8 +334,8 @@ public enum DataType {
         return type != null ? type : UNSUPPORTED;
     }
 
-    static Builder builder(String esType) {
-        return new Builder(esType);
+    static Builder builder() {
+        return new Builder();
     }
 
     /**
@@ -358,21 +343,21 @@ public enum DataType {
      * a builder in java....
      */
     private static class Builder {
-        private final String esType;
+        private String esType;
 
         private String typeName;
 
-        private int size;
+        private Optional<Integer> estimatedSize;
 
         /**
-         * True if the type represents an integer number
+         * True if the type represents a "whole number", as in, does <strong>not</strong> have a decimal part.
          */
-        private boolean isInteger;
+        private boolean isWholeNumber;
 
         /**
-         * True if the type represents a rational number
+         * True if the type represents a "rational number", as in, <strong>does</strong> have a decimal part.
          */
-        private boolean isRational;
+        private boolean isRationalNumber;
 
         /**
          * True if the type supports doc values by default
@@ -396,8 +381,11 @@ public enum DataType {
          */
         private DataType counter;
 
-        Builder(String esType) {
+        Builder() {}
+
+        Builder esType(String esType) {
             this.esType = esType;
+            return this;
         }
 
         Builder typeName(String typeName) {
@@ -405,23 +393,23 @@ public enum DataType {
             return this;
         }
 
-        Builder size(int size) {
-            this.size = size;
+        Builder estimatedSize(int size) {
+            this.estimatedSize = Optional.of(size);
             return this;
         }
 
         Builder unknownSize() {
-            this.size = Integer.MAX_VALUE;
+            this.estimatedSize = Optional.empty();
             return this;
         }
 
-        Builder integer() {
-            this.isInteger = true;
+        Builder wholeNumber() {
+            this.isWholeNumber = true;
             return this;
         }
 
-        Builder rational() {
-            this.isRational = true;
+        Builder rationalNumber() {
+            this.isRationalNumber = true;
             return this;
         }
 
