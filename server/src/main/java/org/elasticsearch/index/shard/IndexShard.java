@@ -1742,7 +1742,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                             // playing safe here and close the engine even if the above succeeds - close can be called multiple times
                             // Also closing refreshListeners to prevent us from accumulating any more listeners
                             IOUtils.close(
-                                engine,
+                                engine != null ? () -> engine.close() : null,
                                 globalCheckpointListeners,
                                 refreshListeners,
                                 pendingReplicationActions,
@@ -1885,7 +1885,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             .<Void>newForked(l -> ActionListener.runWithResource(ActionListener.assertOnce(l), () -> () -> {
                 assert Thread.holdsLock(mutex) == false : "must not hold the mutex here";
                 synchronized (engineMutex) {
-                    IOUtils.close(currentEngineReference.getAndSet(null));
+                    Engine old = currentEngineReference.getAndSet(null);
+                    if (old != null) {
+                        old.close();
+                    }
                 }
             }, (recoveryCompleteListener, ignoredRef) -> {
                 assert Thread.holdsLock(mutex) == false : "must not hold the mutex here";
@@ -2193,7 +2196,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         assert Thread.holdsLock(mutex) == false : "restart recovery under mutex";
         synchronized (engineMutex) {
             assert refreshListeners.pendingCount() == 0 : "we can't restart with pending listeners";
-            IOUtils.close(currentEngineReference.getAndSet(null));
+            Engine old = currentEngineReference.getAndSet(null);
+            if (old != null) {
+                old.close();
+            }
             resetRecoveryStage();
         }
     }
@@ -4253,10 +4259,14 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                             newEngine = null;
                         }
                     }
-                    IOUtils.close(super::close, newEngine);
+                    Engine finalNewEngine = newEngine;
+                    IOUtils.close(super::close, finalNewEngine != null ? () -> finalNewEngine.close() : null);
                 }
             };
-            IOUtils.close(currentEngineReference.getAndSet(readOnlyEngine));
+            Engine old = currentEngineReference.getAndSet(readOnlyEngine);
+            if (old != null) {
+                old.close();
+            }
             newEngineReference.set(engineFactory.newReadWriteEngine(newEngineConfig(replicationTracker)));
             onNewEngine(newEngineReference.get());
         }
@@ -4272,7 +4282,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         newEngineReference.get().refresh("reset_engine");
         synchronized (engineMutex) {
             verifyNotClosed();
-            IOUtils.close(currentEngineReference.getAndSet(newEngineReference.get()));
+            Engine old = currentEngineReference.getAndSet(newEngineReference.get());
+            if (old != null) {
+                old.close();
+            }
             // We set active because we are now writing operations to the engine; this way,
             // if we go idle after some time and become inactive, we still give sync'd flush a chance to run.
             active.set(true);

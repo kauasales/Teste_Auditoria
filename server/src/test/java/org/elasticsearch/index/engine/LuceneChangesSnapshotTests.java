@@ -290,12 +290,14 @@ public class LuceneChangesSnapshotTests extends EngineTestCase {
         isDone.set(true);
         for (Follower follower : followers) {
             follower.join();
-            IOUtils.close(follower.engine, follower.engine.store);
+            IOUtils.close(() -> follower.engine.close(), follower.engine.store);
         }
     }
 
     public void testAccessStoredFieldsSequentially() throws Exception {
-        try (Store store = createStore(); Engine engine = createEngine(defaultSettings, store, createTempDir(), NoMergePolicy.INSTANCE)) {
+        Store store = createStore();
+        Engine engine = createEngine(defaultSettings, store, createTempDir(), NoMergePolicy.INSTANCE);
+        try {
             int smallBatch = between(5, 9);
             long seqNo = 0;
             for (int i = 0; i < smallBatch; i++) {
@@ -374,6 +376,9 @@ public class LuceneChangesSnapshotTests extends EngineTestCase {
                 }
                 assertFalse(snapshot.useSequentialStoredFieldsReader());
             }
+        } finally {
+            store.close();
+            engine.close();
         }
     }
 
@@ -467,7 +472,9 @@ public class LuceneChangesSnapshotTests extends EngineTestCase {
     }
 
     public void testStats() throws Exception {
-        try (Store store = createStore(); Engine engine = createEngine(defaultSettings, store, createTempDir(), NoMergePolicy.INSTANCE)) {
+        Store store = createStore();
+        Engine engine = createEngine(defaultSettings, store, createTempDir(), NoMergePolicy.INSTANCE);
+        try {
             int numOps = between(100, 5000);
             long startingSeqNo = randomLongBetween(0, Integer.MAX_VALUE);
             List<Engine.Operation> operations = generateHistoryOnReplica(
@@ -535,6 +542,9 @@ public class LuceneChangesSnapshotTests extends EngineTestCase {
             }
             // Verify count
             assertThat(engine.countChanges("test", fromSeqNo.getAsLong(), toSeqNo.getAsLong()), equalTo(numOps));
+        } finally {
+            store.close();
+            engine.close();
         }
     }
 }
