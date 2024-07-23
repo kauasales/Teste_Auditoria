@@ -8,50 +8,39 @@
 
 package org.elasticsearch.plugins.internal;
 
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.xcontent.XContentParser;
 
 /**
  * An interface to allow wrapping an XContentParser and observe the events emitted while parsing
  * A default implementation returns a noop DocumentSizeObserver
  */
-public interface DocumentSizeObserver {
+public interface DocumentSizeObserver extends NormalizedDocumentSize {
     /**
      * a default noop implementation
      */
-    DocumentSizeObserver EMPTY_INSTANCE = new DocumentSizeObserver() {
+    DocumentSizeObserver NOOP = new DocumentSizeObserver() {
         @Override
-        public XContentParser wrapParser(XContentParser xContentParser) {
-            return xContentParser;
-        }
-
-        @Override
-        public long normalisedBytesParsed() {
+        public long ingestedBytes() {
             return 0;
         }
 
+        @Override
+        public long storedBytes() {
+            return 0;
+        }
     };
 
     /**
-     * Decorates a provided xContentParser with additional logic (gather some state).
-     *
-     * @param xContentParser to be decorated
-     * @return a decorator xContentParser
+     * Optionally decorates an xContentParser with additional logic.
      */
-    XContentParser wrapParser(XContentParser xContentParser);
-
-    /**
-     * Returns the state gathered during parsing
-     *
-     * @return a number representing a state parsed
-     */
-    long normalisedBytesParsed();
-
-    /**
-     * Indicates if an observer was used on an update request with script
-     *
-     * @return true if update was done by script, false otherwise
-     */
-    default boolean isUpdateByScript() {
-        return false;
+    default XContentParser wrapParser(XContentParser xContentParser) {
+        return xContentParser;
     }
+
+    /**
+     * May enrich the index request with the number of bytes observed when parsing a document.
+     */
+    default void setNormalisedBytesParsedOn(IndexRequest indexRequest) {}
+
 }

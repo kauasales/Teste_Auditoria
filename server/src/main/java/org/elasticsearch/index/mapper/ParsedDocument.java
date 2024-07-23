@@ -15,6 +15,7 @@ import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.index.mapper.MapperService.MergeReason;
 import org.elasticsearch.plugins.internal.DocumentSizeObserver;
+import org.elasticsearch.plugins.internal.NormalizedDocumentSize;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.util.Collections;
@@ -34,7 +35,7 @@ public class ParsedDocument {
 
     private final List<LuceneDocument> documents;
 
-    private final DocumentSizeObserver documentSizeObserver;
+    private final NormalizedDocumentSize normalizedSize;
 
     private BytesReference source;
     private XContentType xContentType;
@@ -62,7 +63,7 @@ public class ParsedDocument {
             new BytesArray("{}"),
             XContentType.JSON,
             null,
-            DocumentSizeObserver.EMPTY_INSTANCE
+            DocumentSizeObserver.NOOP
         );
     }
 
@@ -87,7 +88,7 @@ public class ParsedDocument {
             new BytesArray("{}"),
             XContentType.JSON,
             null,
-            DocumentSizeObserver.EMPTY_INSTANCE
+            DocumentSizeObserver.NOOP
         );
     }
 
@@ -100,7 +101,7 @@ public class ParsedDocument {
         BytesReference source,
         XContentType xContentType,
         Mapping dynamicMappingsUpdate,
-        DocumentSizeObserver documentSizeObserver
+        NormalizedDocumentSize normalizedSize
     ) {
         this.version = version;
         this.seqID = seqID;
@@ -110,7 +111,7 @@ public class ParsedDocument {
         this.source = source;
         this.dynamicMappingsUpdate = dynamicMappingsUpdate;
         this.xContentType = xContentType;
-        this.documentSizeObserver = documentSizeObserver;
+        this.normalizedSize = normalizedSize;
     }
 
     public String id() {
@@ -179,8 +180,8 @@ public class ParsedDocument {
         return "id";
     }
 
-    public DocumentSizeObserver getDocumentSizeObserver() {
-        return documentSizeObserver;
+    public NormalizedDocumentSize getNormalizedSize() {
+        return normalizedSize;
     }
 
 }
