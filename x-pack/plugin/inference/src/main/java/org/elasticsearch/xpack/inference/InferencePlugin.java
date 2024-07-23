@@ -224,19 +224,19 @@ public class InferencePlugin extends Plugin implements ActionPlugin, ExtensibleP
         // must be mutable to be able to add elements
         return new ArrayList<>(
             List.of(
-              ElserInternalService::new,
-              context -> new HuggingFaceElserService(httpFactory.get(), serviceComponents.get()),
-              context -> new HuggingFaceService(httpFactory.get(), serviceComponents.get()),
-              context -> new OpenAiService(httpFactory.get(), serviceComponents.get()),
-              context -> new CohereService(httpFactory.get(), serviceComponents.get()),
-              context -> new AzureOpenAiService(httpFactory.get(), serviceComponents.get()),
-              context -> new AzureAiStudioService(httpFactory.get(), serviceComponents.get()),
-              context -> new GoogleAiStudioService(httpFactory.get(), serviceComponents.get()),
-              context -> new GoogleVertexAiService(httpFactory.get(), serviceComponents.get()),
-              context -> new MistralService(httpFactory.get(), serviceComponents.get()),
-              context -> new AnthropicService(httpFactory.get(), serviceComponents.get()),
-              context -> new AmazonBedrockService(httpFactory.get(), amazonBedrockFactory.get(), serviceComponents.get()),
-              ElasticsearchInternalService::new
+                ElserInternalService::new,
+                context -> new HuggingFaceElserService(httpFactory.get(), serviceComponents.get()),
+                context -> new HuggingFaceService(httpFactory.get(), serviceComponents.get()),
+                context -> new OpenAiService(httpFactory.get(), serviceComponents.get()),
+                context -> new CohereService(httpFactory.get(), serviceComponents.get()),
+                context -> new AzureOpenAiService(httpFactory.get(), serviceComponents.get()),
+                context -> new AzureAiStudioService(httpFactory.get(), serviceComponents.get()),
+                context -> new GoogleAiStudioService(httpFactory.get(), serviceComponents.get()),
+                context -> new GoogleVertexAiService(httpFactory.get(), serviceComponents.get()),
+                context -> new MistralService(httpFactory.get(), serviceComponents.get()),
+                context -> new AnthropicService(httpFactory.get(), serviceComponents.get()),
+                context -> new AmazonBedrockService(httpFactory.get(), amazonBedrockFactory.get(), serviceComponents.get()),
+                ElasticsearchInternalService::new
             )
         );
     }

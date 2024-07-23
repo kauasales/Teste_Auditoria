@@ -18,38 +18,28 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
-import static org.elasticsearch.xpack.inference.services.elser.ElserInternalService.VALID_ELSER_MODEL_IDS;
-
 public class ElserInternalServiceSettings extends ElasticsearchInternalServiceSettings {
 
     public static final String NAME = "elser_mlnode_service_settings";
 
     public static ElasticsearchInternalServiceSettings.Builder fromRequestMap(Map<String, Object> map) {
         ValidationException validationException = new ValidationException();
-        Integer numAllocations = ServiceUtils.removeAsType(map, NUM_ALLOCATIONS, Integer.class);
-        Integer numThreads = ServiceUtils.removeAsType(map, NUM_THREADS, Integer.class);
+        var baseSettings = ElasticsearchInternalServiceSettings.fromMap(map, validationException);
 
-        validateParameters(numAllocations, validationException, numThreads);
-
-        String modelId = ServiceUtils.removeAsType(map, MODEL_ID, String.class);
+        String modelId = baseSettings.getModelId();
         if (modelId != null && ElserModels.isValidModel(modelId) == false) {
-            validationException.addValidationError("unknown ELSER model id [" + modelId + "]. Valid models are " + Arrays.toString(ElserModels.VALID_ELSER_MODEL_IDS.toArray()));
+            var ve = new ValidationException();
+            ve.addValidationError(
+                "Unknown ELSER model ID [" + modelId + "]. Valid models are " + Arrays.toString(ElserModels.VALID_ELSER_MODEL_IDS.toArray())
+            );
+            throw ve;
         }
-      
+
         if (validationException.validationErrors().isEmpty() == false) {
             throw validationException;
         }
 
-        var builder = new InternalServiceSettings.Builder() {
-            @Override
-            public ElserInternalServiceSettings build() {
-                return new ElserInternalServiceSettings(getNumAllocations(), getNumThreads(), getModelId());
-            }
-        };
-        builder.setNumAllocations(numAllocations);
-        builder.setNumThreads(numThreads);
-        builder.setModelId(modelId);
-        return builder;
+        return baseSettings;
     }
 
     public ElserInternalServiceSettings(ElasticsearchInternalServiceSettings other) {

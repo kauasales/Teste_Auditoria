@@ -15,18 +15,15 @@ import org.elasticsearch.xpack.inference.services.elasticsearch.ElasticsearchInt
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Map;
 
 import static org.elasticsearch.xpack.inference.services.elser.ElserModelsTests.randomElserModel;
-import static org.hamcrest.Matchers.containsString;
-
 
 public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTestCase<ElserInternalServiceSettings> {
 
     public static ElserInternalServiceSettings createRandom() {
-        return new ElserInternalServiceSettings(randomIntBetween(1, 4), randomIntBetween(1, 2), randomElserModel());
+        return new ElserInternalServiceSettings(ElasticsearchInternalServiceSettingsTests.validInstance(randomElserModel()));
     }
-  
+
     public void testBwcWrite() throws IOException {
         {
             var settings = new ElserInternalServiceSettings(new ElasticsearchInternalServiceSettings(1, 1, ".elser_model_1", null));
@@ -70,7 +67,7 @@ public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTe
                 )
             );
             case 2 -> {
-                var versions = new HashSet<>(ElserInternalService.VALID_ELSER_MODEL_IDS);
+                var versions = new HashSet<>(ElserModels.VALID_ELSER_MODEL_IDS);
                 versions.remove(instance.modelId());
                 yield new ElserInternalServiceSettings(
                     new ElasticsearchInternalServiceSettings(
