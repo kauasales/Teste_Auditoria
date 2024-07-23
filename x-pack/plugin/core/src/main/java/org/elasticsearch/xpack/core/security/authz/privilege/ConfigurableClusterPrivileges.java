@@ -7,10 +7,15 @@
 
 package org.elasticsearch.xpack.core.security.authz.privilege;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.lucene.util.automaton.Automaton;
+import org.apache.lucene.util.automaton.Operations;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.ToXContent;
@@ -20,8 +25,12 @@ import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xpack.core.security.action.privilege.ApplicationPrivilegesRequest;
 import org.elasticsearch.xpack.core.security.action.profile.UpdateProfileDataAction;
 import org.elasticsearch.xpack.core.security.action.profile.UpdateProfileDataRequest;
+import org.elasticsearch.xpack.core.security.action.role.PutRoleRequest;
 import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
+import org.elasticsearch.xpack.core.security.authz.permission.IndicesPermission;
+import org.elasticsearch.xpack.core.security.authz.permission.ResourcePrivilegesMap;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege.Category;
+import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.elasticsearch.xpack.core.security.support.StringMatcher;
 import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
 
@@ -30,11 +39,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Static utility class for working with {@link ConfigurableClusterPrivilege} instances
@@ -43,6 +55,7 @@ public final class ConfigurableClusterPrivileges {
 
     public static final ConfigurableClusterPrivilege[] EMPTY_ARRAY = new ConfigurableClusterPrivilege[0];
 
+    private static final Logger logger = LogManager.getLogger(ConfigurableClusterPrivileges.class);
     public static final Writeable.Reader<ConfigurableClusterPrivilege> READER = in1 -> in1.readNamedWriteable(
         ConfigurableClusterPrivilege.class
     );
@@ -97,7 +110,7 @@ public final class ConfigurableClusterPrivileges {
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
 
-            expectFieldName(parser, Category.APPLICATION.field, Category.PROFILE.field);
+            expectFieldName(parser, Category.APPLICATION.field, Category.PROFILE.field, Category.ROLE.field);
             if (Category.APPLICATION.field.match(parser.currentName(), parser.getDeprecationHandler())) {
                 expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
                 while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
@@ -106,14 +119,21 @@ public final class ConfigurableClusterPrivileges {
                     expectFieldName(parser, ManageApplicationPrivileges.Fields.MANAGE);
                     privileges.add(ManageApplicationPrivileges.parse(parser));
                 }
-            } else {
-                assert Category.PROFILE.field.match(parser.currentName(), parser.getDeprecationHandler());
+            } else if (Category.PROFILE.field.match(parser.currentName(), parser.getDeprecationHandler())) {
                 expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
                 while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
                     expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
 
                     expectFieldName(parser, WriteProfileDataPrivileges.Fields.WRITE);
                     privileges.add(WriteProfileDataPrivileges.parse(parser));
+                }
+            } else if (Category.ROLE.field.match(parser.currentName(), parser.getDeprecationHandler())) {
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
+                while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+                    expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
+
+                    expectFieldName(parser, ManageRolesPrivilege.Fields.MANAGE);
+                    privileges.add(ManageRolesPrivilege.parse(parser));
                 }
             }
         }
@@ -360,6 +380,129 @@ public final class ConfigurableClusterPrivileges {
         private interface Fields {
             ParseField MANAGE = new ParseField("manage");
             ParseField APPLICATIONS = new ParseField("applications");
+        }
+    }
+
+    public static class ManageRolesPrivilege implements ConfigurableClusterPrivilege {
+        public static final String WRITEABLE_NAME = "manage-roles-privilege";
+        private final StringMatcher indexMatcher;
+        private final Set<String> indices;
+        private final Predicate<TransportRequest> requestPredicate;
+
+        public ManageRolesPrivilege(Set<String> indices) {
+            this.indices = indices;
+            this.indexMatcher = StringMatcher.of(indices);
+            this.requestPredicate = request -> {
+                if (request instanceof final PutRoleRequest putRoleRequest) {
+                    final Collection<String> requestIndexPatterns = Arrays.stream(putRoleRequest.indices())
+                        .flatMap(indexPrivilege -> Arrays.stream(indexPrivilege.getIndices()))
+                        .collect(Collectors.toSet());
+
+                    return requestIndexPatterns.isEmpty() || requestIndexPatterns.stream().allMatch(indexMatcher);
+                }
+                return false;
+            };
+
+        }
+
+        @Override
+        public Category getCategory() {
+            return Category.ROLE;
+        }
+
+        public Collection<String> getIndices() {
+            return this.indices;
+        }
+
+        @Override
+        public String getWriteableName() {
+            return WRITEABLE_NAME;
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeStringCollection(this.indices);
+        }
+
+        public static ManageRolesPrivilege createFrom(StreamInput in) throws IOException {
+            final Set<String> indices = in.readCollectionAsSet(StreamInput::readString);
+            return new ManageRolesPrivilege(indices);
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return builder.field(
+                Fields.MANAGE.getPreferredName(),
+                Map.of(Fields.INDICES.getPreferredName(), List.of(Map.of(Fields.NAMES.getPreferredName(), indices)))
+            );
+        }
+
+        public static ManageRolesPrivilege parse(XContentParser parser) throws IOException {
+            expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
+            expectFieldName(parser, Fields.MANAGE);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
+            expectFieldName(parser, Fields.INDICES);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_ARRAY);
+            Set<String> indices = new HashSet<>();
+            XContentParser.Token token;
+            while ((token = (parser.nextToken())) != XContentParser.Token.END_ARRAY) {
+                expectedToken(token, parser, XContentParser.Token.START_OBJECT);
+                parser.nextToken();
+                expectFieldName(parser, Fields.NAMES);
+                parser.nextToken();
+                String[] parsedIndices = XContentUtils.readStringArray(parser, false);
+                if (parsedIndices != null) {
+                    indices.addAll(Arrays.asList(parsedIndices));
+                }
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            }
+
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            return new ManageRolesPrivilege(indices);
+        }
+
+        @Override
+        public String toString() {
+            return "{"
+                + getCategory()
+                + ":"
+                + Fields.MANAGE.getPreferredName()
+                + ":"
+                + Fields.INDICES.getPreferredName()
+                + ":"
+                + Fields.NAMES.getPreferredName()
+                + "="
+                + Strings.collectionToDelimitedString(indices, ",")
+                + "}";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            final ManageRolesPrivilege that = (ManageRolesPrivilege) o;
+            return this.indices.equals(that.indices);
+        }
+
+        @Override
+        public int hashCode() {
+            return indices.hashCode();
+        }
+
+        @Override
+        public ClusterPermission.Builder buildPermission(final ClusterPermission.Builder builder) {
+            return builder.add(this, Set.of("cluster:admin/xpack/security/role/put"), requestPredicate);
+        }
+
+        private interface Fields {
+            ParseField MANAGE = new ParseField("manage");
+            ParseField INDICES = new ParseField("indices");
+            ParseField NAMES = new ParseField("names");
         }
     }
 }
