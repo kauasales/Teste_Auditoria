@@ -1,0 +1,23 @@
+---
+version: ${xpack.oteldata.template.version}
+index_patterns: ["traces-*.otel-*"]
+priority: 120
+data_stream: {}
+allow_auto_create: true
+_meta:
+  description: default logs template installed by x-pack
+  managed: true
+composed_of:
+# It's TBD how we proceed with these - potentially this could be shared with apm
+#  - traces@mappings
+#  - traces@settings
+  - otel@mappings
+  - traces-otel@mappings
+  - semconv-resource-to-ecs@mappings
+  - traces@custom
+  - traces-otel@custom
+  - ecs@mappings
+ignore_missing_component_templates:
+  - traces@custom
+  - traces-otel@custom
+

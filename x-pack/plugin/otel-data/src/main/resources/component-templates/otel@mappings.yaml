@@ -1,0 +1,67 @@
+---
+version: ${xpack.oteldata.template.version}
+_meta:
+  description: Default mappings for all OTel data streams
+  managed: true
+template:
+  mappings:
+    date_detection: false
+    dynamic: strict
+    properties:
+      "@timestamp":
+        type: date_nanos
+      data_stream.type:
+        type: constant_keyword
+      data_stream.dataset:
+        type: constant_keyword
+      data_stream.namespace:
+        type: constant_keyword
+      attributes:
+        type: passthrough
+        dynamic: true
+        priority: 10
+        time_series_dimension: true
+      dropped_attributes_count:
+        type: long
+      scope:
+        properties:
+          name:
+            type: keyword
+            ignore_above: 1024
+# TODO:
+#Causes error during YAML test
+# [2024-07-19T04:36:51,833][ERROR][o.e.x.c.t.IndexTemplateRegistry] [test-cluster-0] error adding index template [otel@mappings] for [otel] org.elasticsearch.index.mapper.MapperParsingException: Failed to parse mapping: No handler for type [version] declared on field [version]
+#	at org.elasticsearch.server@8.16.0-SNAPSHOT/org.elasticsearch.index.mapper.MapperService.parseMapping(MapperService.java:610)
+#          version:
+#            type: version
+          schema_url:
+            type: keyword
+            ignore_above: 1024
+          dropped_attributes_count:
+            type: long
+          attributes:
+            type: passthrough
+            dynamic: true
+            priority: 20
+            time_series_dimension: true
+      resource:
+        properties:
+          schema_url:
+            type: keyword
+            ignore_above: 1024
+          dropped_attributes_count:
+            type: long
+          attributes:
+            type: passthrough
+            dynamic: true
+            priority: 30
+            time_series_dimension: true
+    dynamic_templates:
+      - complex_attributes:
+          path_match:
+            - resource.attributes.*
+            - scope.attributes.*
+            - attributes.*
+          match_mapping_type: object
+          mapping:
+            type: flattened
