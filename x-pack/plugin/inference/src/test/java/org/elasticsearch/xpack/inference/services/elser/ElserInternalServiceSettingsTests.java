@@ -23,11 +23,7 @@ import static org.hamcrest.Matchers.containsString;
 public class ElserInternalServiceSettingsTests extends AbstractWireSerializingTestCase<ElserInternalServiceSettings> {
 
     public static ElserInternalServiceSettings createRandom() {
-        return new ElserInternalServiceSettings(
-            randomIntBetween(1, 4),
-            randomIntBetween(1, 2),
-            randomElserModel()
-        );
+        return new ElserInternalServiceSettings(randomIntBetween(1, 4), randomIntBetween(1, 2), randomElserModel());
     }
 
     public void testFromMap_DefaultModelVersion() {
