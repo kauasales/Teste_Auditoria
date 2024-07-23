@@ -54,6 +54,7 @@ public record TestCaseSupplier(String name, List<DataType> types, Supplier<TestC
         Supplier<TestCaseSupplier.TestCase> {
 
     private static final Logger logger = LogManager.getLogger(TestCaseSupplier.class);
+
     /**
      * Build a test case without types.
      *
