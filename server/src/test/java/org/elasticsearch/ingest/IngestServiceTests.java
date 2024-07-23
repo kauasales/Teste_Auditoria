@@ -16,6 +16,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.cluster.node.info.NodesInfoResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.FailureStoreMetrics;
 import org.elasticsearch.action.bulk.TransportBulkAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -80,6 +81,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -87,9 +89,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.cluster.service.ClusterStateTaskExecutorUtils.executeAndAssertSuccessful;
@@ -151,7 +153,8 @@ public class IngestServiceTests extends ESTestCase {
             List.of(DUMMY_PLUGIN),
             client,
             null,
-            DocumentParsingProvider.EMPTY_INSTANCE
+            DocumentParsingProvider.EMPTY_INSTANCE,
+            FailureStoreMetrics.NOOP
         );
         Map<String, Processor.Factory> factories = ingestService.getProcessorFactories();
         assertTrue(factories.containsKey("foo"));
@@ -171,7 +174,8 @@ public class IngestServiceTests extends ESTestCase {
                 List.of(DUMMY_PLUGIN, DUMMY_PLUGIN),
                 client,
                 null,
-                DocumentParsingProvider.EMPTY_INSTANCE
+                DocumentParsingProvider.EMPTY_INSTANCE,
+                FailureStoreMetrics.NOOP
             )
         );
         assertTrue(e.getMessage(), e.getMessage().contains("already registered"));
@@ -188,7 +192,8 @@ public class IngestServiceTests extends ESTestCase {
             List.of(DUMMY_PLUGIN),
             client,
             null,
-            DocumentParsingProvider.EMPTY_INSTANCE
+            DocumentParsingProvider.EMPTY_INSTANCE,
+            FailureStoreMetrics.NOOP
         );
         final IndexRequest indexRequest = new IndexRequest("_index").id("_id")
             .source(Map.of())
@@ -210,7 +215,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1108,7 +1113,7 @@ public class IngestServiceTests extends ESTestCase {
             bulkRequest.numberOfActions(),
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1153,7 +1158,7 @@ public class IngestServiceTests extends ESTestCase {
             bulkRequest.numberOfActions(),
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1221,7 +1226,7 @@ public class IngestServiceTests extends ESTestCase {
             bulkRequest.numberOfActions(),
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1256,7 +1261,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1298,7 +1303,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1328,7 +1333,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1391,7 +1396,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1449,7 +1454,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1507,7 +1512,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1559,7 +1564,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -1622,7 +1627,7 @@ public class IngestServiceTests extends ESTestCase {
             numRequest,
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             requestItemErrorHandler,
             completionHandler,
@@ -1665,7 +1670,7 @@ public class IngestServiceTests extends ESTestCase {
             .setFinalPipeline("_id2");
         doThrow(new RuntimeException()).when(processor)
             .execute(eqIndexTypeId(indexRequest.version(), indexRequest.versionType(), Map.of()), any());
-        final Predicate<String> redirectCheck = (idx) -> indexRequest.index().equals(idx);
+        final Function<String, Optional<Boolean>> redirectCheck = (idx) -> Optional.of(indexRequest.index().equals(idx));
         @SuppressWarnings("unchecked")
         final TriConsumer<Integer, String, Exception> redirectHandler = mock(TriConsumer.class);
         @SuppressWarnings("unchecked")
@@ -1722,7 +1727,7 @@ public class IngestServiceTests extends ESTestCase {
             .execute(eqIndexTypeId(indexRequest.version(), indexRequest.versionType(), Map.of()), any());
         doThrow(new RuntimeException()).when(processor)
             .execute(eqIndexTypeId(indexRequest.version(), indexRequest.versionType(), Map.of()), any());
-        final Predicate<String> redirectPredicate = (idx) -> indexRequest.index().equals(idx);
+        final Function<String, Optional<Boolean>> redirectPredicate = (idx) -> Optional.of(indexRequest.index().equals(idx));
         @SuppressWarnings("unchecked")
         final TriConsumer<Integer, String, Exception> redirectHandler = mock(TriConsumer.class);
         @SuppressWarnings("unchecked")
@@ -1799,7 +1804,7 @@ public class IngestServiceTests extends ESTestCase {
             numRequest,
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> true,
+            (s) -> Optional.of(true),
             requestItemRedirectHandler,
             requestItemErrorHandler,
             completionHandler,
@@ -1860,7 +1865,7 @@ public class IngestServiceTests extends ESTestCase {
             numRequest,
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             requestItemErrorHandler,
             completionHandler,
@@ -1976,7 +1981,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             (integer, e) -> {},
             (thread, e) -> {},
@@ -2058,7 +2063,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2086,7 +2091,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2119,7 +2124,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2153,7 +2158,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2183,7 +2188,7 @@ public class IngestServiceTests extends ESTestCase {
             1,
             List.of(indexRequest),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2281,7 +2286,7 @@ public class IngestServiceTests extends ESTestCase {
             bulkRequest.numberOfActions(),
             bulkRequest.requests(),
             dropHandler,
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             failureHandler,
             completionHandler,
@@ -2320,7 +2325,8 @@ public class IngestServiceTests extends ESTestCase {
             List.of(testPlugin),
             client,
             null,
-            DocumentParsingProvider.EMPTY_INSTANCE
+            DocumentParsingProvider.EMPTY_INSTANCE,
+            FailureStoreMetrics.NOOP
         );
         ingestService.addIngestClusterStateListener(ingestClusterStateListener);
 
@@ -2371,7 +2377,7 @@ public class IngestServiceTests extends ESTestCase {
                 1,
                 List.of(indexRequest),
                 indexReq -> {},
-                (s) -> false,
+                (s) -> Optional.of(false),
                 (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
                 (integer, e) -> {},
                 (thread, e) -> {},
@@ -2451,7 +2457,7 @@ public class IngestServiceTests extends ESTestCase {
             8,
             bulkRequest.requests(),
             indexReq -> {},
-            (s) -> false,
+            (s) -> Optional.of(false),
             (slot, targetIndex, e) -> fail("Should not be redirecting failures"),
             (integer, e) -> {},
             (thread, e) -> {},
@@ -2675,7 +2681,8 @@ public class IngestServiceTests extends ESTestCase {
             List.of(DUMMY_PLUGIN),
             client,
             null,
-            DocumentParsingProvider.EMPTY_INSTANCE
+            DocumentParsingProvider.EMPTY_INSTANCE,
+            FailureStoreMetrics.NOOP
         );
         ingestService.applyClusterState(new ClusterChangedEvent("", clusterState, clusterState));
 
@@ -2974,7 +2981,8 @@ public class IngestServiceTests extends ESTestCase {
             }),
             client,
             null,
-            documentParsingProvider
+            documentParsingProvider,
+            FailureStoreMetrics.NOOP
         );
         if (randomBoolean()) {
             /*
